@@ -1,0 +1,29 @@
+{
+  "task_name": "SuperProduct Launch Content",
+  "nodes": [
+    {
+      "id": "node1",
+      "agent": "WriterAgent",
+      "input": { "topic": "SuperProduct", "tone": "enthusiastic" },
+      "dependsOn": []
+    },
+    {
+      "id": "node2",
+      "agent": "GuardAgent",
+      "input": { "check": "tone" },
+      "dependsOn": ["node1"]
+    },
+    {
+      "id": "node3",
+      "agent": "ImageAgent",
+      "input": { "description": "Key visual based on text" },
+      "dependsOn": ["node2"]
+    },
+    {
+      "id": "node4",
+      "agent": "GuardAgent",
+      "input": { "check": "image_quality" },
+      "dependsOn": ["node3"]
+    }
+  ]
+}
