@@ -119,6 +119,14 @@ function countMarkers(text, markers) {
   if (!normalized || markers.length === 0) {
     return 0;
   }
+  const matches = text.match(/!/g);
+  return matches ? matches.length : 0;
+}
+
+  return markers.reduce((total, marker) => {
+    if (!marker) {
+      return total;
+    }
 
   let total = 0;
 
