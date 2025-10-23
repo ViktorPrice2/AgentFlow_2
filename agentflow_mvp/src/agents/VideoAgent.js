@@ -1,6 +1,7 @@
 import { ProviderManager } from '../core/ProviderManager.js';
 import { Logger } from '../core/Logger.js';
 import { TaskStore } from '../core/db/TaskStore.js';
+import { REELS_CHECKLIST, JSON_FORMAT_INSTRUCTION } from '../utils/expertPrompts.js';
 
 const VIDEO_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
@@ -84,14 +85,19 @@ export class VideoAgent {
       .join(' ');
 
     // ПРОМПТ ДЛЯ СОЗДАНИЯ СЦЕНАРИЯ И ПРОМПТА
-    const promptToGemini = [
-      'Вы — креативный директор. Создайте сценарий видеоролика (30 сек) и промпт для генератора видео.',
-      'Сценарий должен состоять из 3-х сцен.',
-      textResult ? `Используйте этот текст как основу для дикторского текста: ${textResult.substring(0, 500)}` : '',
+    const promptSegments = [
+      'Вы — креативный директор. Создайте сценарий видеоролика для Reels/TikTok (20-25 секунд).',
+      REELS_CHECKLIST,
+      'Сценарий должен состоять из 3-х сцен (Хук, Ценность, CTA).',
+      contextNarrative ? `Контекст для сценария: ${contextNarrative}` : '',
+      scheduleDetails ? `Детали публикации: ${scheduleDetails}` : '',
+      textResult ? `Используйте этот текст как основу для дикторского текста: ${textResult.substring(0, 500)}` : 'Если текста нет, придумайте убедительный дикторский текст самостоятельно.',
       `Используйте этот промпт для визуального ряда: ${imagePrompt}`,
-      scheduleDetails,
-      'Ваш ответ должен быть ТОЛЬКО в формате JSON-объекта, без каких-либо пояснений или дополнительного текста. Пример: {"scenes": [{"time": "0-10s", "text": "...", "visual_description": "..."}], "final_video_prompt": "..."}',
-    ].join(' ');
+      JSON_FORMAT_INSTRUCTION,
+      'Пример: {"scenes": [{"time": "0-5s", "text": "Хук...", "visual_description": "..."}], "final_video_prompt": "..."}',
+    ].filter(Boolean);
+
+    const promptToGemini = promptSegments.join('\n\n');
 
     try {
       const { result: rawJson, tokens } = await ProviderManager.invoke(VIDEO_MODEL, promptToGemini, 'text');
