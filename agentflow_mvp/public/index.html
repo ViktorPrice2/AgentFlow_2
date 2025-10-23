@@ -76,6 +76,11 @@
         .tag-pill.status-success { background: #c8e6c9; color: #1b5e20; }
         .tag-pill.status-failed { background: #ffcdd2; color: #b71c1c; }
         .tag-pill.status-planned { background: #e0f7fa; color: #006064; }
+        .schedule-value { display: block; white-space: pre-wrap; word-break: break-word; line-height: 1.35; }
+        .schedule-table textarea.inline-textarea { min-height: 60px; resize: vertical; }
+        .schedule-table textarea.inline-textarea.small { min-height: 40px; }
+        .schedule-table input.metrics-input { width: 100%; text-align: center; }
+        .schedule-table .field-stack { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
         .chart-wrapper { margin-top: 20px; height: 240px; }
         .chart-wrapper canvas { width: 100% !important; height: 100% !important; }
         @media (max-width: 900px) {
@@ -220,6 +225,17 @@
                 return { label: 'Ошибка', className: 'status-failed' };
             }
             return { label: 'План', className: 'status-planned' };
+        }
+
+        function escapeHtml(value) {
+            if (value === null || value === undefined) {
+                return '';
+            }
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
         }
 
         function extractContentStrings(item) {
@@ -451,55 +467,72 @@ ${node.status}`,
                 const generatedAt = formatGeneratedAt(item.last_generated_at);
                 const isGenerating = statusInfo.className === 'status-running';
                 const errorMessage = item.generation_error
-                    ? `<div class="content-placeholder" style="background:#fff5f5;border-color:#ffcdd2;color:#b71c1c;">Ошибка: ${item.generation_error}</div>`
+                    ? `<div class="content-placeholder" style="background:#fff5f5;border-color:#ffcdd2;color:#b71c1c;">Ошибка: ${escapeHtml(item.generation_error)}</div>`
                     : '';
 
+                const safeDate = escapeHtml(dateValue);
+                const safeType = escapeHtml(typeValue);
+                const safeChannel = escapeHtml(channelValue);
+                const safeTopic = escapeHtml(topicValue);
+                const safeObjective = escapeHtml(objectiveValue);
+                const safeNotes = escapeHtml(notesValue);
+
+                const channelTitle = channelValue ? ` title="${safeChannel}"` : '';
+                const topicTitle = topicValue ? ` title="${safeTopic}"` : '';
+                const objectiveTitle = objectiveValue ? ` title="${safeObjective}"` : '';
+                const notesTitle = notesValue ? ` title="${safeNotes}"` : '';
+
                 const dateCell = scheduleEditMode
-                    ? `<input type="date" value="${dateValue}" data-index="${index}" data-field="date" onchange="updateScheduleField(this, '${taskId}')">`
-                    : (dateValue || '—');
+                    ? `<input type="date" value="${safeDate}" data-index="${index}" data-field="date" onchange="updateScheduleField(this, '${taskId}')">`
+                    : `<div class="schedule-value">${safeDate || '—'}</div>`;
                 const typeCell = scheduleEditMode
-                    ? `<input type="text" value="${typeValue}" data-index="${index}" data-field="type" onchange="updateScheduleField(this, '${taskId}')">`
-                    : (typeValue || '—');
+                    ? `<input type="text" value="${safeType}" data-index="${index}" data-field="type" onchange="updateScheduleField(this, '${taskId}')">`
+                    : `<div class="schedule-value">${safeType || '—'}</div>`;
                 const channelCell = scheduleEditMode
-                    ? `<input type="text" value="${channelValue}" data-index="${index}" data-field="channel" onchange="updateScheduleField(this, '${taskId}')">`
-                    : (channelValue || '—');
+                    ? `<input type="text" value="${safeChannel}" data-index="${index}" data-field="channel" onchange="updateScheduleField(this, '${taskId}')">`
+                    : `<div class="schedule-value"${channelTitle}>${safeChannel || '—'}</div>`;
                 const topicCell = scheduleEditMode
-                    ? `<input type="text" value="${topicValue}" data-index="${index}" data-field="topic" onchange="updateScheduleField(this, '${taskId}')">`
-                    : (topicValue || '—');
+                    ? `<textarea class="inline-textarea" data-index="${index}" data-field="topic" onchange="updateScheduleField(this, '${taskId}')">${safeTopic}</textarea>`
+                    : `<div class="schedule-value"${topicTitle}>${safeTopic || '—'}</div>`;
                 const objectiveCell = scheduleEditMode
-                    ? `<input type="text" value="${objectiveValue}" data-index="${index}" data-field="objective" onchange="updateScheduleField(this, '${taskId}')">`
-                    : (objectiveValue || '—');
+                    ? `<textarea class="inline-textarea small" data-index="${index}" data-field="objective" onchange="updateScheduleField(this, '${taskId}')">${safeObjective}</textarea>`
+                    : `<div class="schedule-value"${objectiveTitle}>${safeObjective || '—'}</div>`;
                 const notesCell = scheduleEditMode
-                    ? `<input type="text" value="${notesValue}" data-index="${index}" data-field="notes" onchange="updateScheduleField(this, '${taskId}')">`
-                    : (notesValue || '—');
+                    ? `<textarea class="inline-textarea small" data-index="${index}" data-field="notes" onchange="updateScheduleField(this, '${taskId}')">${safeNotes}</textarea>`
+                    : `<div class="schedule-value"${notesTitle}>${safeNotes || '—'}</div>`;
 
-                const viewsInput = `<input type="number" min="0" value="${viewsValue}" data-index="${index}" data-field="views" onchange="updateScheduleField(this, '${taskId}')">`;
-                const likesInput = `<input type="number" min="0" value="${likesValue}" data-index="${index}" data-field="likes" onchange="updateScheduleField(this, '${taskId}')">`;
+                const viewsInput = `<input type="number" min="0" class="metrics-input" value="${viewsValue}" data-index="${index}" data-field="views" onchange="updateScheduleField(this, '${taskId}')">`;
+                const likesInput = `<input type="number" min="0" class="metrics-input" value="${likesValue}" data-index="${index}" data-field="likes" onchange="updateScheduleField(this, '${taskId}')">`;
 
-                const generatedLabel = generatedAt ? `<span class="content-timestamp">Обновлено: ${generatedAt}</span>` : '';
-                const nodeLabel = item.last_generated_id ? `<span class="content-timestamp">ID: ${item.last_generated_id}</span>` : '';
+                const safeGeneratedAt = escapeHtml(generatedAt);
+                const generatedLabel = safeGeneratedAt ? `<span class="content-timestamp">Обновлено: ${safeGeneratedAt}</span>` : '';
+                const safeNodeId = item.last_generated_id ? escapeHtml(item.last_generated_id) : '';
+                const nodeLabel = safeNodeId ? `<span class="content-timestamp">ID: ${safeNodeId}</span>` : '';
 
                 let contentCell;
+                const contentPreviewSafe = escapeHtml(contentData.preview);
+                const contentFullSafe = escapeHtml(contentData.full);
+
                 if (scheduleEditMode) {
                     contentCell = `
                         <div class="content-cell">
-                            <div class="content-meta">
+                            <div class="content-meta field-stack">
                                 <span class="tag-pill ${statusInfo.className}">${statusInfo.label}</span>
                                 ${generatedLabel}
                                 ${nodeLabel}
                             </div>
-                            <textarea data-index="${index}" data-field="content" onchange="updateScheduleField(this, '${taskId}')" placeholder="Добавьте готовый текст или заметки">${contentData.hasContent ? contentData.full : ''}</textarea>
+                            <textarea data-index="${index}" data-field="content" onchange="updateScheduleField(this, '${taskId}')" placeholder="Добавьте готовый текст или заметки">${contentData.hasContent ? contentFullSafe : ''}</textarea>
                             ${errorMessage}
                         </div>
                     `;
                 } else {
                     const detailsBlock = contentData.hasContent
-                        ? `<details class="content-details"><summary>${contentData.preview}</summary><pre>${contentData.full}</pre></details>`
+                        ? `<details class="content-details"><summary>${contentPreviewSafe}</summary><pre>${contentFullSafe}</pre></details>`
                         : `<div class="content-placeholder">Контент пока не сгенерирован</div>`;
                     const buttonLabel = isGenerating ? 'Генерация…' : 'Generate Content';
                     contentCell = `
                         <div class="content-cell">
-                            <div class="content-meta">
+                            <div class="content-meta field-stack">
                                 <span class="tag-pill ${statusInfo.className}">${statusInfo.label}</span>
                                 ${generatedLabel}
                                 ${nodeLabel}

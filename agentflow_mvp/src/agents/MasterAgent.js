@@ -12,6 +12,8 @@ const AGENT_MAP = {
   StrategyAgent: (await import('./StrategyAgent.js')).StrategyAgent,
 };
 
+const FINAL_NODE_STATUSES = new Set(['SUCCESS', 'FAILED', 'MANUALLY_OVERRIDDEN', 'SKIPPED_RETRY']);
+
 async function processJob(job, onUpdate) {
   const { agentType, payload } = job;
   const { nodeId } = payload;
@@ -109,5 +111,98 @@ export class MasterAgent {
     }
 
     console.log(`\n[Scheduler] Final Task Status: ${TaskStore.getTask(taskId).status}`);
+  }
+
+  static async resumeTasks(onUpdate) {
+    const tasksMap = TaskStore.getAllTasks();
+    if (!(tasksMap instanceof Map) || tasksMap.size === 0) {
+      return;
+    }
+
+    const tasksToResume = [];
+    const tasksToNotify = new Set();
+    let storeDirty = false;
+
+    for (const [taskId, task] of tasksMap.entries()) {
+      if (!task) {
+        continue;
+      }
+
+      const nodeEntries = Array.isArray(task.nodes)
+        ? task.nodes.map(id => TaskStore.getNode(id)).filter(Boolean)
+        : [];
+
+      if (nodeEntries.length === 0) {
+        continue;
+      }
+
+      const allCompleted = nodeEntries.every(node => FINAL_NODE_STATUSES.has(node.status));
+      if (allCompleted) {
+        const anyFailed = nodeEntries.some(node => node.status === 'FAILED');
+        const finalStatus = anyFailed ? 'FAILED' : 'COMPLETED';
+        if (task.status !== finalStatus) {
+          task.status = finalStatus;
+          storeDirty = true;
+          tasksToNotify.add(taskId);
+        }
+        continue;
+      }
+
+      const hasPendingOrRunning = nodeEntries.some(
+        node => node.status === 'PLANNED' || node.status === 'RUNNING'
+      );
+
+      if (!hasPendingOrRunning) {
+        continue;
+      }
+
+      const shouldResume =
+        task.status === 'RUNNING' ||
+        task.status === 'CREATED' ||
+        (task.status === 'FAILED' && nodeEntries.some(node => node.status === 'RUNNING'));
+
+      if (!shouldResume) {
+        continue;
+      }
+
+      let mutated = false;
+      for (const node of nodeEntries) {
+        if (node.status === 'RUNNING') {
+          node.status = 'PLANNED';
+          node.result_data = null;
+          mutated = true;
+        }
+      }
+
+      if (task.status !== 'RUNNING') {
+        task.status = 'RUNNING';
+        mutated = true;
+      }
+
+      if (mutated) {
+        storeDirty = true;
+        tasksToNotify.add(taskId);
+      }
+
+      tasksToResume.push(taskId);
+    }
+
+    if (storeDirty) {
+      TaskStore.saveToDisk();
+    }
+
+    if (typeof onUpdate === 'function') {
+      tasksToNotify.forEach(taskId => onUpdate(taskId));
+    }
+
+    if (tasksToResume.length > 0) {
+      console.log(`[MasterAgent] Resuming ${tasksToResume.length} task(s) after restart.`);
+    }
+
+    for (const taskId of tasksToResume) {
+      MasterAgent.runScheduler(taskId, onUpdate).catch(error => {
+        console.error(`[MasterAgent] Failed to resume task ${taskId}:`, error);
+      });
+    }
   }
 }
