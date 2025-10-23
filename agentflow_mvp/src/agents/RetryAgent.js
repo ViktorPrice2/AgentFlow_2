@@ -1,6 +1,7 @@
 import { ProviderManager } from '../core/ProviderManager.js';
 import { Logger } from '../core/Logger.js';
 import { TaskStore } from '../core/db/TaskStore.js';
+import { buildRussianArticlePrompt } from '../utils/promptUtils.js';
 
 function clone(value) {
   return value ? JSON.parse(JSON.stringify(value)) : {};
@@ -47,11 +48,16 @@ export class RetryAgent {
     });
 
     const originalPromptText = originalInput.promptOverride ||
-      (originalInput.tone && originalInput.topic
-        ? `Write an ${originalInput.tone} article about ${originalInput.topic}.`
-        : originalInput.rawPrompt || 'the provided request');
+      ((originalInput.tone || originalInput.topic)
+        ? buildRussianArticlePrompt(originalInput.topic, originalInput.tone)
+        : originalInput.rawPrompt || 'исходный запрос');
 
-    const correctionPrompt = `The previous attempt to generate content failed because: ${reason}. The original prompt was: ${originalPromptText}. Provide a revised prompt that keeps the original request intent but fixes the issue. Output only the revised prompt text.`;
+    const correctionPrompt = [
+      `Предыдущая попытка сгенерировать контент завершилась ошибкой по причине: ${reason}.`,
+      `Исходный промпт: ${originalPromptText}.`,
+      'Сформулируй исправленный промпт на русском языке, сохранив исходное намерение пользователя и устранив проблему.',
+      'Верни только текст обновленного промпта без дополнительных пояснений.',
+    ].join(' ');
 
     try {
       const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
