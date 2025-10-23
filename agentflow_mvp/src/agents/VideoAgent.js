@@ -4,6 +4,22 @@ import { TaskStore } from '../core/db/TaskStore.js';
 
 const VIDEO_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
+// Вспомогательная функция для очистки ответа LLM от мусора (```json\n и т.п.)
+function cleanJsonString(rawString) {
+  if (typeof rawString !== 'string') return rawString;
+  let cleaned = rawString.trim();
+  // Удаляем markdown блок '```json\n' и '```'
+  if (cleaned.startsWith('```json')) {
+    cleaned = cleaned.substring(7);
+  } else if (cleaned.startsWith('```')) {
+    cleaned = cleaned.substring(3);
+  }
+  if (cleaned.endsWith('```')) {
+    cleaned = cleaned.substring(0, cleaned.length - 3);
+  }
+  return cleaned.trim();
+}
+
 export class VideoAgent {
   static async execute(nodeId) {
     const node = TaskStore.getNode(nodeId);
@@ -27,9 +43,9 @@ export class VideoAgent {
     const promptToGemini = [
       'Вы — креативный директор. Создайте сценарий видеоролика (30 сек) и промпт для генератора видео.',
       'Сценарий должен состоять из 3-х сцен.',
-      `Используйте этот текст как основу для дикторского текста: ${textResult}`,
+      `Используйте этот текст как основу для дикторского текста: ${textResult.substring(0, 500)}`,
       `Используйте этот промпт для визуального ряда: ${imagePrompt}`,
-      'Итоговый ответ должен быть в формате JSON: {"scenes": [{"time": "0-10s", "text": "...", "visual_description": "..."}], "final_video_prompt": "..."}',
+      'Ваш ответ должен быть ТОЛЬКО в формате JSON-объекта, без каких-либо пояснений или дополнительного текста. Пример: {"scenes": [{"time": "0-10s", "text": "...", "visual_description": "..."}], "final_video_prompt": "..."}',
     ].join(' ');
 
     try {
@@ -37,12 +53,13 @@ export class VideoAgent {
 
       let resultData;
       try {
-        resultData = JSON.parse(rawJson.trim());
+        const cleanedJson = cleanJsonString(rawJson);
+        resultData = JSON.parse(cleanedJson);
         if (!resultData.final_video_prompt) {
           throw new Error('JSON missing final_video_prompt');
         }
       } catch (error) {
-        resultData = { error: 'JSON_PARSE_FAILED', rawResponse: rawJson, prompt: promptToGemini };
+        resultData = { error: 'JSON_PARSE_FAILED', rawResponse: rawJson, parserError: error.message, prompt: promptToGemini };
         throw new Error('LLM did not return valid JSON.');
       }
 
