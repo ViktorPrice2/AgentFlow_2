@@ -20,7 +20,7 @@ const FORMAL_MARKERS = [
   'предоставляем',
   'сообщить вам',
   'информируем вас',
-  'уведомляю',
+  'уведомля',
 ];
 
 const ENTHUSIASTIC_MARKERS = [
@@ -128,16 +128,22 @@ function countMarkers(text, markers) {
       return total;
     }
 
-    let count = 0;
+  let total = 0;
+
+  for (const marker of markers) {
+    if (!marker) {
+      continue;
+    }
+
     let searchIndex = normalized.indexOf(marker);
 
     while (searchIndex !== -1) {
-      count += 1;
+      total += 1;
       searchIndex = normalized.indexOf(marker, searchIndex + marker.length);
     }
+  }
 
-    return total + count;
-  }, 0);
+  return total;
 }
 
 function countExclamations(text) {
