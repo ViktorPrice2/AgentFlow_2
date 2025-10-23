@@ -20,7 +20,7 @@ const FORMAL_MARKERS = [
   'предоставляем',
   'сообщить вам',
   'информируем вас',
-  'уведомля',
+  'уведомляю',
 ];
 
 const ENTHUSIASTIC_MARKERS = [
@@ -119,6 +119,9 @@ function countMarkers(text, markers) {
   if (!normalized || markers.length === 0) {
     return 0;
   }
+  const matches = text.match(/!/g);
+  return matches ? matches.length : 0;
+}
 
   return markers.reduce((total, marker) => {
     if (!marker) {
