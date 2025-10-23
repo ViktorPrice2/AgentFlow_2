@@ -617,6 +617,41 @@ app.post('/api/tasks/:taskId/restart/:nodeId', (req, res) => {
   });
 });
 
+app.delete('/api/tasks/:taskId', (req, res) => {
+  const { taskId } = req.params;
+  const existingTask = TaskStore.getTask(taskId);
+
+  if (!existingTask) {
+    return res.status(404).json({ success: false, message: 'Task not found.' });
+  }
+
+  const deleted = TaskStore.deleteTask(taskId);
+  if (!deleted) {
+    return res.status(500).json({ success: false, message: 'Unable to delete task.' });
+  }
+
+  const logPath = path.join(LOGS_DIR, `${taskId}.log.jsonl`);
+  try {
+    if (fs.existsSync(logPath)) {
+      fs.unlinkSync(logPath);
+    }
+  } catch (error) {
+    console.warn(`[Server] Failed to remove log file for ${taskId}:`, error.message);
+  }
+
+  const taskResultsDir = path.join(RESULTS_DIR, taskId);
+  try {
+    if (fs.existsSync(taskResultsDir)) {
+      fs.rmSync(taskResultsDir, { recursive: true, force: true });
+    }
+  } catch (error) {
+    console.warn(`[Server] Failed to clean results for ${taskId}:`, error.message);
+  }
+
+  io.emit('task-removed', { taskId });
+  res.json({ success: true, message: `Task ${taskId} deleted.` });
+});
+
 httpServer.listen(PORT, async () => {
   console.log(`\nAgentFlow Web UI running at http://localhost:${PORT}`);
   try {

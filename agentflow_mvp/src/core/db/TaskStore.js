@@ -213,6 +213,25 @@ export class TaskStore {
     return task.schedule;
   }
 
+  static deleteTask(taskId) {
+    const task = tasks.get(taskId);
+    if (!task) {
+      return false;
+    }
+
+    const taskNodeIds = new Set(Array.isArray(task.nodes) ? task.nodes : []);
+
+    for (const [nodeId, node] of Array.from(nodes.entries())) {
+      if (node?.taskId === taskId || taskNodeIds.has(nodeId)) {
+        nodes.delete(nodeId);
+      }
+    }
+
+    tasks.delete(taskId);
+    TaskStore.saveToDisk();
+    return true;
+  }
+
   static updateScheduleItem(taskId, index, updates = {}) {
     const task = tasks.get(taskId);
     if (!task || !Array.isArray(task.schedule) || index < 0 || index >= task.schedule.length) {
