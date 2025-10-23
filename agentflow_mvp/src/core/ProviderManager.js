@@ -35,11 +35,12 @@ export class ProviderManager {
           const response = await axios.post(url, {
             // КОРРЕКТНАЯ СТРУКТУРА PAYLOAD для generateContent
             contents: [{ role: "user", parts: [{ text: prompt }] }],
-            generationConfig: {
+            config: {
               temperature: 0.7,
             },
           }, {
-            headers: { 'Content-Type': 'application/json' }
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 60000, // Таймаут для предотвращения socket hang up
           });
           
           // Проверка на ошибку от API, которая не возвращает 400
