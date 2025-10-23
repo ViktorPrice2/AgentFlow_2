@@ -22,12 +22,12 @@ export class ImageAgent {
     const prompt = `${baseDescription}${contextText ? ` Using the context: ${contextText.substring(0, 100)}...` : ''}`;
 
     try {
-      const { result: imageData, tokens } = await ProviderManager.invoke(IMAGE_MODEL, prompt, 'image');
+      const { result: imageData, tokens, modelUsed } = await ProviderManager.invoke(IMAGE_MODEL, prompt, 'image');
 
       const resultData = {
         imagePath: imageData.url,
         metadata: {
-          model: IMAGE_MODEL,
+          model: modelUsed || IMAGE_MODEL,
           prompt: prompt.substring(0, 200),
           tokens,
         },
