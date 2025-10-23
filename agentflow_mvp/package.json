@@ -1,0 +1,11 @@
+{
+  "name": "agentflow_mvp",
+  "version": "1.0.0",
+  "description": "AgentFlow 2.0 MVP Skeleton",
+  "main": "src/orchestrate.mjs",
+  "type": "module",
+  "scripts": {
+    "start": "node src/orchestrate.mjs",
+    "test": "node --test tests/e2e.test.js"
+  }
+}
