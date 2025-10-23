@@ -44,15 +44,19 @@ export class TaskStore {
       ? scheduleData.map(item => ({
           date: item?.date || '',
           type: item?.type || 'post',
-          channel: item?.channel || 'organic',
+          channel: item?.channel || item?.platform || 'organic',
           topic: item?.topic || item?.title || '',
           objective: item?.objective || item?.goal || '',
           notes: item?.notes || item?.cta || '',
           views: Number.isFinite(item?.views) ? item.views : 0,
           likes: Number.isFinite(item?.likes) ? item.likes : 0,
+          content: typeof item?.content === 'string' ? item.content : '',
           content_prompt: item?.content_prompt || null,
           image_prompt: item?.image_prompt || null,
           status: item?.status || 'PLANNED_CONTENT',
+          last_generated_at: item?.last_generated_at || null,
+          last_generated_id: item?.last_generated_id || null,
+          generation_error: item?.generation_error || null,
         }))
       : [];
 
@@ -71,6 +75,11 @@ export class TaskStore {
       return null;
     }
 
+    if (Object.prototype.hasOwnProperty.call(updates, 'goal')) {
+      updates.objective = updates.goal;
+      delete updates.goal;
+    }
+
     if (Object.prototype.hasOwnProperty.call(updates, 'views')) {
       const parsedViews = Number.parseInt(updates.views, 10);
       target.views = Number.isFinite(parsedViews) ? parsedViews : target.views;
@@ -81,6 +90,12 @@ export class TaskStore {
       const parsedLikes = Number.parseInt(updates.likes, 10);
       target.likes = Number.isFinite(parsedLikes) ? parsedLikes : target.likes;
       delete updates.likes;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updates, 'content')) {
+      const rawContent = updates.content;
+      target.content = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent ?? '');
+      delete updates.content;
     }
 
     Object.assign(target, updates);
@@ -106,6 +121,38 @@ export class TaskStore {
 
   static getAllNodes() {
     return nodes;
+  }
+
+  static createTemporaryNode(taskId, agentType, inputData = {}, options = {}) {
+    const task = tasks.get(taskId);
+    if (!task) {
+      return null;
+    }
+
+    const suffix = Math.random().toString(16).slice(2, 8);
+    const nodeId = `schedule_${agentType}_${Date.now()}_${suffix}`;
+
+    const dependsOn = Array.isArray(options.dependsOn) ? [...options.dependsOn] : [];
+
+    const nodeEntry = {
+      id: nodeId,
+      taskId,
+      agent_type: agentType,
+      status: 'PLANNED',
+      input_data: clone(inputData),
+      dependsOn,
+      result_data: null,
+      cost: 0,
+      attempt: 1,
+      is_temporary: true,
+    };
+
+    nodes.set(nodeId, nodeEntry);
+    return nodeEntry;
+  }
+
+  static removeNode(nodeId) {
+    nodes.delete(nodeId);
   }
 
   static reset() {

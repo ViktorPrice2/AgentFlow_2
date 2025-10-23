@@ -69,9 +69,13 @@ function normalizeSchedule(schedule) {
     notes: item?.notes || item?.cta || '',
     views: Number.isFinite(item?.views) ? item.views : 0,
     likes: Number.isFinite(item?.likes) ? item.likes : 0,
+    content: typeof item?.content === 'string' ? item.content : '',
     content_prompt: item?.content_prompt || null,
     image_prompt: item?.image_prompt || null,
     status: item?.status || 'PLANNED_CONTENT',
+    last_generated_at: item?.last_generated_at || null,
+    last_generated_id: item?.last_generated_id || null,
+    generation_error: item?.generation_error || null,
   }));
 }
 
