@@ -30,6 +30,46 @@ if (!fs.existsSync(RESULTS_DIR)) {
 }
 app.use('/results', express.static(RESULTS_DIR));
 
+const applyMediaPreferences = (plan, { includeImage = true, includeVideo = false } = {}) => {
+  if (!plan || !Array.isArray(plan.nodes)) {
+    return plan;
+  }
+
+  const nodesToKeep = [];
+  const removedIds = new Set();
+
+  for (const node of plan.nodes) {
+    const isImageNode =
+      node.agent === 'ImageAgent' ||
+      node.agent_type === 'ImageAgent' ||
+      node.input?.check === 'image_quality';
+    const isVideoNode =
+      node.agent === 'VideoAgent' ||
+      node.agent_type === 'VideoAgent' ||
+      node.input?.check === 'video_quality';
+
+    if ((!includeImage && isImageNode) || (!includeVideo && isVideoNode)) {
+      removedIds.add(node.id);
+      continue;
+    }
+
+    nodesToKeep.push({
+      ...node,
+      dependsOn: Array.isArray(node.dependsOn) ? [...node.dependsOn] : [],
+    });
+  }
+
+  if (removedIds.size > 0) {
+    for (const node of nodesToKeep) {
+      if (Array.isArray(node.dependsOn)) {
+        node.dependsOn = node.dependsOn.filter(dep => !removedIds.has(dep));
+      }
+    }
+  }
+
+  return { ...plan, nodes: nodesToKeep };
+};
+
 const broadcastTaskUpdate = taskId => {
   const taskData = TaskStore.getTask(taskId);
   if (!taskData) return;
@@ -55,7 +95,7 @@ io.on('connection', socket => {
 
 app.post('/api/tasks/start', async (req, res) => {
   try {
-    const { taskName, taskTopic, taskTone } = req.body || {};
+    const { taskName, taskTopic, taskTone, includeImage, includeVideo } = req.body || {};
     const plan = JSON.parse(dagTemplate);
 
     if (!plan?.nodes?.length) {
@@ -65,7 +105,19 @@ app.post('/api/tasks/start', async (req, res) => {
     plan.task_name = taskName || plan.task_name;
     plan.nodes[0].input = { topic: taskTopic, tone: taskTone };
 
-    const taskId = TaskStore.createTask(plan.task_name || 'AgentFlow Task', plan);
+    const includeImageFlag =
+      includeImage === undefined ? true : includeImage === true || includeImage === 'true';
+    const includeVideoFlag = includeVideo === true || includeVideo === 'true';
+
+    const customizedPlan = applyMediaPreferences(plan, {
+      includeImage: includeImageFlag,
+      includeVideo: includeVideoFlag,
+    });
+
+    const taskId = TaskStore.createTask(
+      customizedPlan.task_name || 'AgentFlow Task',
+      customizedPlan
+    );
 
     broadcastTaskUpdate(taskId);
 
