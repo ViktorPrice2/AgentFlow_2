@@ -31,37 +31,61 @@ export class ProviderManager {
       const url = `${GEMINI_API_BASE_URL}/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
       console.log(`[API CALL] Calling REAL ${model} for prompt: ${prompt.substring(0, 30)}...`);
 
-      try {
-          const response = await axios.post(url, {
-            // КОРРЕКТНАЯ СТРУКТУРА PAYLOAD для generateContent
-            contents: [{ role: "user", parts: [{ text: prompt }] }],
-            config: {
-              temperature: 0.7,
-            },
-          }, {
-            headers: { 'Content-Type': 'application/json' },
-            timeout: 60000, // Таймаут для предотвращения socket hang up
-          });
-          
-          // Проверка на ошибку от API, которая не возвращает 400
-          if (!response.data.candidates || response.data.candidates.length === 0) {
-              const errorMessage = response.data.promptFeedback?.blockReason || 'API returned no candidates (possible block/safety reason).';
-              throw new Error(`Gemini API Error: ${errorMessage}`);
-          }
+      const axiosConfig = {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 60000, // Таймаут для предотвращения socket hang up
+      };
 
-          const text = response.data.candidates[0].content.parts[0].text;
-          const usage = response.data.usageMetadata;
-          const tokens = usage ? usage.totalTokenCount : text.length;
-          
-          return { result: text, tokens };
-          
+      const payload = {
+        // КОРРЕКТНАЯ СТРУКТУРА PAYLOAD для generateContent
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.7,
+        },
+      };
+
+      const sendRequest = async body => {
+        const response = await axios.post(url, body, axiosConfig);
+
+        if (!response.data.candidates || response.data.candidates.length === 0) {
+          const errorMessage = response.data.promptFeedback?.blockReason || 'API returned no candidates (possible block/safety reason).';
+          throw new Error(`Gemini API Error: ${errorMessage}`);
+        }
+
+        const text = response.data.candidates[0].content.parts[0].text;
+        const usage = response.data.usageMetadata;
+        const tokens = usage ? usage.totalTokenCount : text.length;
+
+        return { result: text, tokens };
+      };
+
+      try {
+        return await sendRequest(payload);
       } catch (error) {
-          // Выводим полный ответ, чтобы увидеть причину ошибки 400
-          if (error.response) {
-              console.error('Gemini API 400 Response Body:', JSON.stringify(error.response.data, null, 2));
-              throw new Error(`Request failed with status ${error.response.status}. Details in console.`);
+        const message = error.response?.data?.error?.message || '';
+        const isConfigFieldError =
+          error.response?.status === 400 && /Unknown name "config"/i.test(message);
+
+        if (isConfigFieldError) {
+          console.warn('[ProviderManager] Gemini rejected generationConfig payload. Retrying without optional config block.');
+          try {
+            const fallbackPayload = { ...payload };
+            delete fallbackPayload.generationConfig;
+            return await sendRequest(fallbackPayload);
+          } catch (fallbackError) {
+            if (fallbackError.response) {
+              console.error('Gemini API 400 Response Body:', JSON.stringify(fallbackError.response.data, null, 2));
+              throw new Error(`Request failed with status ${fallbackError.response.status}. Details in console.`);
+            }
+            throw fallbackError;
           }
-          throw error;
+        }
+
+        if (error.response) {
+          console.error('Gemini API 400 Response Body:', JSON.stringify(error.response.data, null, 2));
+          throw new Error(`Request failed with status ${error.response.status}. Details in console.`);
+        }
+        throw error;
       }
     }
     
