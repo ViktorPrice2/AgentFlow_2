@@ -4,6 +4,7 @@
 import { ProviderManager } from '../core/ProviderManager.js';
 import { Logger } from '../core/Logger.js';
 import { TaskStore } from '../core/db/TaskStore.js';
+import { buildRussianArticlePrompt } from '../utils/promptUtils.js';
 
 function clone(value) {
   return value ? JSON.parse(JSON.stringify(value)) : {};
@@ -43,18 +44,26 @@ export class RetryAgent {
 
     const reason = failedGuardNode.result_data?.reason || 'Unknown failure reason';
     const originalInput = clone(dependencyNode.input_data);
+    const expectedTone = originalInput.tone || 'neutral';
 
     logger.logStep(nodeId, 'START', {
       message: `Generating corrective prompt for ${dependencyId}`,
       reason,
+      expectedTone,
     });
 
     const originalPromptText = originalInput.promptOverride ||
-      (originalInput.tone && originalInput.topic
-        ? `Write an ${originalInput.tone} article about ${originalInput.topic}.`
-        : originalInput.rawPrompt || 'the provided request');
+      ((originalInput.tone || originalInput.topic)
+        ? buildRussianArticlePrompt(originalInput.topic, originalInput.tone)
+        : originalInput.rawPrompt || 'исходный запрос');
 
-    const correctionPrompt = `The previous attempt to generate content failed because: ${reason}. The original prompt was: ${originalPromptText}. Provide a revised prompt that keeps the original request intent but fixes the issue. Output only the revised prompt text.`;
+    const correctionPrompt = [
+      `Предыдущая попытка сгенерировать контент завершилась ошибкой по причине: ${reason}.`,
+      `Контент был проверен на соответствие тону: "${expectedTone}".`,
+      `Исходный промпт: ${originalPromptText}.`,
+      'Сформулируй НОВЫЙ, исправленный промпт, который явно **усилит** требуемый тон и **избежит** предыдущей ошибки.',
+      'Верни только текст обновленного промпта без дополнительных пояснений. Промпт должен быть коротким.',
+    ].join(' ');
 
     try {
       const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
@@ -75,6 +84,7 @@ export class RetryAgent {
       TaskStore.updateNodeStatus(nodeId, 'SUCCESS', {
         correctiveNodeId: correctiveNode.id,
         retryTarget: dependencyId,
+        internalPrompt: correctionPrompt,
       });
       logger.logStep(nodeId, 'END', {
         status: 'SUCCESS',

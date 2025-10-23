@@ -273,50 +273,58 @@
             const statusClass = `status-${(node.status || '').toLowerCase()}`;
             const cost = Number.isFinite(node.cost) ? node.cost : 0;
             const initialPrompt = getInitialPrompt(node);
-            
+
             let html = `
                 <h3>Узел: ${node.id} (${node.agent_type.replace('Agent', ' Agent')})</h3>
                 <p><strong>Статус:</strong> <span class="status-pill ${statusClass}">${node.status}</span></p>
                 <p><strong>Стоимость:</strong> $${cost.toFixed(4)}</p>
                 <p><strong>Зависимости:</strong> ${(node.dependsOn || []).join(', ') || '—'}</p>
-                
+
                 <h4>Промпт для агента (Вход)</h4>
                 <pre class="prompt-input">${initialPrompt}</pre>
             `;
 
+            const finalPrompt = node.result_data?.meta?.prompt || node.result_data?.meta?.promptOverride;
+            if (finalPrompt) {
+                html += `<h4>Финальный промпт, отправленный в LLM</h4><pre>${finalPrompt}</pre>`;
+            }
+
+            if (node.agent_type === 'RetryAgent' && node.result_data?.internalPrompt) {
+                html += `<h4>Внутренний промпт (Для LLM-коррекции)</h4><pre>${node.result_data.internalPrompt}</pre>`;
+            }
+
+            const generatedContent = node.result_data?.finalImagePrompt || node.result_data?.final_video_prompt;
+            if (generatedContent) {
+                html += `<h4>Итоговый Сгенерированный План/Промпт</h4><pre>${generatedContent}</pre>`;
+            }
+
             if (node.result_data) {
-                // Показываем итоговый промпт, если он есть в результатах (для Image/Video Planning)
-                const finalPrompt = node.result_data.finalImagePrompt || node.result_data.final_video_prompt;
-                if (finalPrompt) {
-                    html += `<h4>Итоговый Сгенерированный Промпт:</h4><pre>${finalPrompt}</pre>`;
-                }
                 html += `<h4>Полный Результат</h4><pre>${JSON.stringify(node.result_data, null, 2)}</pre>`;
             }
 
             if (node.status === 'FAILED') {
                 html += `<p><strong class="status-failed">Узел завершился с ошибкой. Причина:</strong> ${node.result_data?.reason || 'Проверьте лог.'}</p>`;
                 html += `<a href="/api/logs/${node.taskId}" target="_blank"><button class="secondary">Посмотреть Лог Задачи</button></a>`;
-                if (node.agent_type === 'GuardAgent') {
-                    html += `<button style="margin-left: 10px;" onclick="openPromptModal('${node.id}', '${node.result_data?.reason || 'Неизвестно'}')">Редактировать Промпт и Перезапустить</button>`;
+                if (node.agent_type?.includes('GuardAgent')) {
+                    html += `<button style="margin-left: 10px;" onclick="openPromptModal('${node.id}')">Редактировать Промпт и Перезапустить</button>`;
                 }
             }
 
             nodeDetailsContainer.innerHTML = html;
         }
 
-        function openPromptModal(failedGuardId, reason) {
+        function openPromptModal(failedGuardId) {
             pendingRestartNode = failedGuardId;
             editNodeId.textContent = failedGuardId;
-            failReason.textContent = reason;
-
             const nodeData = visData.nodes.get(failedGuardId)?.nodeData;
-            const dependencyId = nodeData?.dependsOn?.[0]; // Узел, который нужно исправить
+            const dependencyId = nodeData?.dependsOn?.[0];
             const dependencyNode = dependencyId ? visData.nodes.get(dependencyId)?.nodeData : null;
 
             if (dependencyNode) {
-                const currentPrompt = getInitialPrompt(dependencyNode);
+                const currentPrompt = dependencyNode.input_data?.promptOverride || JSON.stringify(dependencyNode.input_data, null, 2);
                 newPromptArea.value = currentPrompt;
             }
+            failReason.textContent = nodeData?.result_data?.reason || 'Неизвестная причина сбоя.';
             promptModal.style.display = 'block';
         }
 

@@ -84,6 +84,7 @@ export class RetryAgent {
       TaskStore.updateNodeStatus(nodeId, 'SUCCESS', {
         correctiveNodeId: correctiveNode.id,
         retryTarget: dependencyId,
+        internalPrompt: correctionPrompt,
       });
       logger.logStep(nodeId, 'END', {
         status: 'SUCCESS',
