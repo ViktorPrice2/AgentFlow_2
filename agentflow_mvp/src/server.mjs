@@ -34,6 +34,8 @@ if (!fs.existsSync(RESULTS_DIR)) {
 }
 app.use('/results', express.static(RESULTS_DIR));
 
+TaskStore.loadFromDisk();
+
 const applyMediaPreferences = (plan, { includeImage = true, includeVideo = false } = {}) => {
   if (!plan || !Array.isArray(plan.nodes)) {
     return plan;
@@ -582,6 +584,11 @@ app.post('/api/tasks/:taskId/restart/:nodeId', (req, res) => {
   });
 });
 
-httpServer.listen(PORT, () => {
+httpServer.listen(PORT, async () => {
   console.log(`\nAgentFlow Web UI running at http://localhost:${PORT}`);
+  try {
+    await MasterAgent.resumeTasks(broadcastTaskUpdate);
+  } catch (error) {
+    console.error('[Server] Failed to resume persisted tasks:', error);
+  }
 });
