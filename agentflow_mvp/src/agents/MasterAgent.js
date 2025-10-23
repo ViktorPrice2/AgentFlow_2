@@ -8,6 +8,7 @@ const AGENT_MAP = {
   VideoAgent: (await import('./VideoAgent.js')).VideoAgent, // VideoPromptAgent
   GuardAgent: (await import('./GuardAgent.js')).GuardAgent,
   RetryAgent: (await import('./RetryAgent.js')).RetryAgent,
+  HumanGateAgent: (await import('./HumanGateAgent.js')).HumanGateAgent,
   ProductAnalysisAgent: (await import('./ProductAnalysisAgent.js')).ProductAnalysisAgent,
   StrategyAgent: (await import('./StrategyAgent.js')).StrategyAgent,
   StrategyReviewAgent: (await import('./StrategyReviewAgent.js')).StrategyReviewAgent,
@@ -63,11 +64,16 @@ export class MasterAgent {
 
     let completed = false;
     while (!completed) {
-      const readyNodes = TaskStore.getReadyNodes(taskId);
+      const readyNodes = TaskStore.getReadyNodes(taskId).filter(node => node.status !== 'PAUSED');
 
       for (const node of readyNodes) {
         console.log(`[Scheduler] Dispatching ${node.agent_type} for ${node.id}`);
         QueueService.addJob(node.agent_type, { taskId, nodeId: node.id, input_data: node.input_data });
+
+        if (node.agent_type === 'HumanGateAgent') {
+          const job = QueueService.getJob();
+          await processJob(job, onUpdate);
+        }
       }
 
       while (!QueueService.isQueueEmpty()) {
@@ -98,11 +104,23 @@ export class MasterAgent {
 
       if (!completed && readyNodes.length === 0 && QueueService.isQueueEmpty()) {
         const allNodes = updatedTask.nodes.map(id => TaskStore.getNode(id));
-        const plannedCount = allNodes.filter(n => n && n.status === 'PLANNED').length;
+        const pausedCount = allNodes.filter(n => n?.status === 'PAUSED').length;
+        const plannedCount = allNodes.filter(n => n && (n.status === 'PLANNED' || n.status === 'PAUSED')).length;
+
+        if (pausedCount > 0) {
+          console.warn('\n[Scheduler] Task Paused/Blocked. Waiting for Human Input or Retry Limit.');
+          updatedTask.status = 'PAUSED';
+          TaskStore.saveToDisk();
+          if (typeof onUpdate === 'function') {
+            onUpdate(taskId);
+          }
+          break;
+        }
 
         if (plannedCount > 0) {
           console.warn('\n[Scheduler] Task Blocked. Transitioning to FAILED.');
           updatedTask.status = 'FAILED';
+          TaskStore.saveToDisk();
         }
         if (typeof onUpdate === 'function') {
           onUpdate(taskId);

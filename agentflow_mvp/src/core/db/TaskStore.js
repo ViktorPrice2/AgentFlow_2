@@ -133,14 +133,25 @@ function ensureTaskStatusConsistency(taskId) {
   const anyFailed = nodeEntries.some(node => node.status === 'FAILED');
   const anyRunning = nodeEntries.some(node => node.status === 'RUNNING');
   const anyPlanned = nodeEntries.some(node => node.status === 'PLANNED');
+  const anyPaused = nodeEntries.some(node => node.status === 'PAUSED');
 
   if (allCompleted) {
     task.status = anyFailed ? 'FAILED' : 'COMPLETED';
     return;
   }
 
-  if (anyRunning || anyPlanned) {
-    task.status = anyRunning ? 'RUNNING' : task.status === 'CREATED' ? 'CREATED' : 'RUNNING';
+  if (anyPaused && !anyRunning) {
+    task.status = 'PAUSED';
+    return;
+  }
+
+  if (anyRunning) {
+    task.status = 'RUNNING';
+    return;
+  }
+
+  if (anyPlanned) {
+    task.status = task.status === 'CREATED' ? 'CREATED' : 'RUNNING';
   }
 }
 
@@ -415,7 +426,9 @@ export class TaskStore {
 
     if (node.taskId && tasks.has(node.taskId)) {
       const task = tasks.get(node.taskId);
-      if (status === 'RUNNING' && task.status !== 'RUNNING') {
+      if (status === 'PAUSED') {
+        task.status = 'PAUSED';
+      } else if (status === 'RUNNING' && task.status !== 'RUNNING') {
         task.status = 'RUNNING';
       }
       ensureTaskStatusConsistency(node.taskId);
