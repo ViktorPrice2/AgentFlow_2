@@ -10,6 +10,7 @@ const AGENT_MAP = {
   RetryAgent: (await import('./RetryAgent.js')).RetryAgent,
   ProductAnalysisAgent: (await import('./ProductAnalysisAgent.js')).ProductAnalysisAgent,
   StrategyAgent: (await import('./StrategyAgent.js')).StrategyAgent,
+  StrategyReviewAgent: (await import('./StrategyReviewAgent.js')).StrategyReviewAgent,
 };
 
 const FINAL_NODE_STATUSES = new Set(['SUCCESS', 'FAILED', 'MANUALLY_OVERRIDDEN', 'SKIPPED_RETRY']);

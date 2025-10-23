@@ -37,24 +37,41 @@ describe('AgentFlow end-to-end scheduler', () => {
     const task = TaskStore.getTask(taskId);
     expect(task.status).toBe('COMPLETED');
 
-    const writerNode = TaskStore.getNode('node1');
-    const guard1Node = TaskStore.getNode('node2');
-    const imageNode = TaskStore.getNode('node3');
-    const guard2Node = TaskStore.getNode('node4');
+    const writerNode = TaskStore.getNode('node1_write');
+    const guardNode = TaskStore.getNode('node2_guard');
+    const analysisNode = TaskStore.getNode('node1_analyze');
+    const strategyNode = TaskStore.getNode('node2_strategy');
+    const imageNode = TaskStore.getNode('node3_image_prompt');
+    const videoNode = TaskStore.getNode('node4_video_prompt');
+    const reviewNode = TaskStore.getNode('node5_review_strategy');
 
     expect(writerNode.status).toBe('SUCCESS');
     expect(writerNode.result_data.text).toContain('MOCK: gemini-2.5-flash generated content for:');
     expect(writerNode.result_data.text).toContain('Напиши статью');
 
-    expect(guard1Node.status).toBe('SUCCESS');
-    expect(guard1Node.result_data.status).toBe('SUCCESS');
+    expect(guardNode.status).toBe('SUCCESS');
+    expect(guardNode.result_data.status).toBe('SUCCESS');
+
+    expect(analysisNode.status).toBe('SUCCESS');
+    expect(Array.isArray(analysisNode.result_data.kqm)).toBe(true);
+
+    expect(strategyNode.status).toBe('SUCCESS');
+    expect(Array.isArray(strategyNode.result_data.schedule)).toBe(true);
 
     expect(imageNode.status).toBe('SUCCESS');
     expect(imageNode.result_data.imagePath).toContain('.png');
     const resolvedImagePath = path.join(process.cwd(), imageNode.result_data.imagePath);
     expect(fs.existsSync(resolvedImagePath)).toBe(true);
 
-    expect(guard2Node.status).toBe('SUCCESS');
+    expect(videoNode.status).toBe('SUCCESS');
+
+    expect(reviewNode.status).toBe('SUCCESS');
+    expect(Array.isArray(reviewNode.result_data.extension_schedule)).toBe(true);
+
+    const taskSchedule = TaskStore.getTaskSchedule(taskId);
+    expect(taskSchedule.length).toBe(
+      (strategyNode.result_data.schedule?.length || 0) + (reviewNode.result_data.extension_schedule?.length || 0)
+    );
   });
 
   test('guard failure triggers retry agent and recovers', async () => {
@@ -66,23 +83,23 @@ describe('AgentFlow end-to-end scheduler', () => {
     const task = TaskStore.getTask(taskId);
     expect(task.status).toBe('COMPLETED');
 
-    const guard1Node = TaskStore.getNode('node2');
-    expect(guard1Node.status).toBe('SKIPPED_RETRY');
+    const guardNode = TaskStore.getNode('node2_guard');
+    expect(guardNode.status).toBe('SKIPPED_RETRY');
 
-    const retryWriterId = findLastMatching(task.nodes, id => id.startsWith('node1_v'));
+    const retryWriterId = findLastMatching(task.nodes, id => id.startsWith('node1_write_v'));
     expect(retryWriterId).toBeDefined();
     const retryWriterNode = TaskStore.getNode(retryWriterId);
     expect(retryWriterNode.status).toBe('SUCCESS');
     expect(retryWriterNode.input_data.promptOverride).toBeTruthy();
 
-    const retryGuardId = findLastMatching(task.nodes, id => id.startsWith('node2_v'));
+    const retryGuardId = findLastMatching(task.nodes, id => id.startsWith('node2_guard_v'));
     expect(retryGuardId).toBeDefined();
     const retryGuardNode = TaskStore.getNode(retryGuardId);
     expect(retryGuardNode.status).toBe('SUCCESS');
     expect(retryGuardNode.dependsOn[0]).toBe(retryWriterId);
-    expect(guard1Node.result_data?.nextGuard).toBe(retryGuardId);
+    expect(guardNode.result_data?.nextGuard).toBe(retryGuardId);
 
-    const retryAgentId = findLastMatching(task.nodes, id => id.startsWith('retry_node2'));
+    const retryAgentId = findLastMatching(task.nodes, id => id.startsWith('retry_node2_guard'));
     expect(retryAgentId).toBeDefined();
     const retryAgentNode = TaskStore.getNode(retryAgentId);
     expect(retryAgentNode.status).toBe('SUCCESS');
@@ -97,15 +114,15 @@ describe('AgentFlow end-to-end scheduler', () => {
     const task = TaskStore.getTask(taskId);
     expect(task.status).toBe('FAILED');
 
-    const guard1Node = TaskStore.getNode('node2');
-    expect(guard1Node.status).toBe('SKIPPED_RETRY');
+    const guardNode = TaskStore.getNode('node2_guard');
+    expect(guardNode.status).toBe('SKIPPED_RETRY');
 
-    const lastGuardId = findLastMatching(task.nodes, id => id.startsWith('node2_v'));
+    const lastGuardId = findLastMatching(task.nodes, id => id.startsWith('node2_guard_v'));
     expect(lastGuardId).toBeDefined();
     const lastGuardNode = TaskStore.getNode(lastGuardId);
     expect(lastGuardNode.status).toBe('FAILED');
 
-    const retryAgentId = findLastMatching(task.nodes, id => id.startsWith('retry_node2'));
+    const retryAgentId = findLastMatching(task.nodes, id => id.startsWith('retry_node2_guard'));
     expect(retryAgentId).toBeDefined();
     const retryAgentNode = TaskStore.getNode(retryAgentId);
     expect(retryAgentNode.status).toBe('SUCCESS');

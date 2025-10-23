@@ -14,34 +14,34 @@
       "dependsOn": ["node1_write"]
     },
     {
-      "id": "node3_product_analysis",
+      "id": "node1_analyze",
       "agent": "ProductAnalysisAgent",
-      "input": { "topic": "SuperProduct" },
+      "input": { "topic": "SuperProduct Analysis" },
       "dependsOn": ["node2_guard"]
     },
     {
-      "id": "node4_strategy",
+      "id": "node2_strategy",
       "agent": "StrategyAgent",
-      "input": { "topic": "Стратегический план" },
-      "dependsOn": ["node3_product_analysis"]
+      "input": { "topic": "Initial Strategy Design" },
+      "dependsOn": ["node1_analyze"]
     },
     {
-      "id": "node5_image",
+      "id": "node3_image_prompt",
       "agent": "ImageAgent",
       "input": { "description": "Key visual for social media post" },
       "dependsOn": ["node2_guard"]
     },
     {
-      "id": "node6_video",
+      "id": "node4_video_prompt",
       "agent": "VideoAgent",
       "input": { "style": "dynamic" },
-      "dependsOn": ["node2_guard", "node5_image"]
+      "dependsOn": ["node2_guard", "node3_image_prompt"]
     },
     {
-      "id": "node7_video_guard",
-      "agent": "GuardAgent",
-      "input": { "check": "storyboard_validity" },
-      "dependsOn": ["node6_video"]
+      "id": "node5_review_strategy",
+      "agent": "StrategyReviewAgent",
+      "input": { "review_period": "5_days" },
+      "dependsOn": ["node2_strategy"]
     }
   ]
 }
