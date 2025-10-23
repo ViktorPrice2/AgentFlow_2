@@ -39,7 +39,8 @@ export class ProviderManager {
               temperature: 0.7,
             },
           }, {
-            headers: { 'Content-Type': 'application/json' }
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 60000, // Таймаут для предотвращения socket hang up
           });
           
           // Проверка на ошибку от API, которая не возвращает 400

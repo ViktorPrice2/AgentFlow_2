@@ -14,36 +14,31 @@ export class RetryAgent {
     }
 
     const logger = new Logger(node.taskId);
-    const failedNodeId = payload.failedNodeId || node.input_data?.failedNodeId;
+    const failedGuardNodeId = payload.failedGuardNodeId || payload.failedNodeId || node.input_data?.failedGuardNodeId || node.input_data?.failedNodeId;
 
-    if (!failedNodeId) {
-      logger.logStep(nodeId, 'ERROR', { message: 'RetryAgent missing failedNodeId context.' });
-      TaskStore.updateNodeStatus(nodeId, 'FAILED', { error: 'failedNodeId not provided.' });
+    if (!failedGuardNodeId) {
+      logger.logStep(nodeId, 'ERROR', { message: 'RetryAgent missing failedGuardNodeId context.' });
+      TaskStore.updateNodeStatus(nodeId, 'FAILED', { error: 'failedGuardNodeId not provided.' });
       return;
     }
 
-    const failedNode = TaskStore.getNode(failedNodeId);
-    if (!failedNode) {
-      logger.logStep(nodeId, 'ERROR', { message: `Failed node ${failedNodeId} not found.` });
-      TaskStore.updateNodeStatus(nodeId, 'FAILED', { error: `Failed node ${failedNodeId} not found.` });
-      return;
+    const failedGuardNode = TaskStore.getNode(failedGuardNodeId);
+    if (!failedGuardNode) {
+        logger.logStep(nodeId, 'ERROR', { message: `Failed Guard node ${failedGuardNodeId} not found.` });
+        TaskStore.updateNodeStatus(nodeId, 'FAILED', { error: `Failed Guard node ${failedGuardNodeId} not found.` });
+        return;
     }
 
-    const dependencyId = failedNode.dependsOn?.[0];
-    if (!dependencyId) {
-      logger.logStep(nodeId, 'ERROR', { message: `Failed node ${failedNodeId} has no dependency to correct.` });
-      TaskStore.updateNodeStatus(nodeId, 'FAILED', { error: 'No dependency to correct.' });
-      return;
-    }
-
+    const dependencyId = failedGuardNode.dependsOn?.[0];
     const dependencyNode = TaskStore.getNode(dependencyId);
+
     if (!dependencyNode) {
       logger.logStep(nodeId, 'ERROR', { message: `Dependency node ${dependencyId} not found.` });
       TaskStore.updateNodeStatus(nodeId, 'FAILED', { error: `Dependency node ${dependencyId} not found.` });
       return;
     }
 
-    const reason = failedNode.result_data?.reason || 'Unknown failure reason';
+    const reason = failedGuardNode.result_data?.reason || 'Unknown failure reason';
     const originalInput = clone(dependencyNode.input_data);
 
     logger.logStep(nodeId, 'START', {
@@ -51,41 +46,28 @@ export class RetryAgent {
       reason,
     });
 
-    const correctionPrompt = `The previous attempt failed because: ${reason}. Original input: ${JSON.stringify(
-      originalInput
-    )}. Provide a revised prompt that keeps the request intent but fixes the issue.`;
+    const originalPromptText = originalInput.promptOverride ||
+      (originalInput.tone && originalInput.topic
+        ? `Write an ${originalInput.tone} article about ${originalInput.topic}.`
+        : originalInput.rawPrompt || 'the provided request');
+
+    const correctionPrompt = `The previous attempt to generate content failed because: ${reason}. The original prompt was: ${originalPromptText}. Provide a revised prompt that keeps the original request intent but fixes the issue. Output only the revised prompt text.`;
 
     try {
       const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
       const { result: newPromptText } = await ProviderManager.invoke(model, correctionPrompt, 'text');
 
       const updatedInput = clone(originalInput);
-      updatedInput.promptOverride = newPromptText;
+      updatedInput.promptOverride = newPromptText.trim();
       updatedInput.retryCount = (originalInput.retryCount || 0) + 1;
 
-      const correctiveNode = TaskStore.createCorrectiveNode(dependencyId, {
-        input_data: updatedInput,
-      });
+      const correctiveNode = TaskStore.createCorrectiveNode(dependencyId, updatedInput);
 
       if (!correctiveNode) {
-        throw new Error(`Unable to create corrective node for ${dependencyId}`);
+          throw new Error('Max retry limit reached or failed to create corrective node.');
       }
 
-      const preparedNode = TaskStore.prepareNodeForRetry(failedNodeId, correctiveNode.id);
-
-      if (preparedNode && preparedNode.status === 'FAILED') {
-        const reason = preparedNode.result_data?.reason || 'Retry limit reached.';
-        TaskStore.updateNodeStatus(correctiveNode.id, 'FAILED', { reason, retryOf: dependencyId });
-        TaskStore.updateNodeStatus(nodeId, 'FAILED', {
-          error: reason,
-          retryTarget: dependencyId,
-        });
-        logger.logStep(nodeId, 'END', {
-          status: 'FAILED',
-          reason,
-        });
-        return { error: reason };
-      }
+      TaskStore.prepareNodeForRetry(failedGuardNodeId, correctiveNode.id);
 
       TaskStore.updateNodeStatus(nodeId, 'SUCCESS', {
         correctiveNodeId: correctiveNode.id,
@@ -96,6 +78,7 @@ export class RetryAgent {
         correctiveNode: correctiveNode.id,
       });
       return { correctiveNodeId: correctiveNode.id };
+
     } catch (error) {
       logger.logStep(nodeId, 'ERROR', { message: error.message });
       TaskStore.updateNodeStatus(nodeId, 'FAILED', { error: error.message });

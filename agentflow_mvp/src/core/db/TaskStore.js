@@ -80,7 +80,7 @@ export class TaskStore {
 
         const allCompleted = task.nodes.every(id => {
           const n = nodes.get(id);
-          return n && (n.status === 'SUCCESS' || n.status === 'FAILED' || n.status === 'MANUALLY_OVERRIDDEN');
+          return n && (n.status === 'SUCCESS' || n.status === 'FAILED' || n.status === 'MANUALLY_OVERRIDDEN' || n.status === 'SKIPPED_RETRY');
         });
 
         if (allCompleted && task.status !== 'FAILED') {
@@ -112,11 +112,11 @@ export class TaskStore {
     const originalNode = nodes.get(originalNodeId);
     if (!originalNode) return null;
 
-    // Считаем все узлы, связанные с оригинальной генерацией (WriterAgent, ImageAgent)
+    const originalAgentType = originalNode.agent_type;
+    const originalAgentBaseId = originalNodeId.replace(/_v\d+$/, '');
     const allAttempts = Array.from(nodes.values()).filter(n =>
-      n.agent_type === originalNode.agent_type && 
-      n.input_data.topic === originalNode.input_data.topic && 
-      n.id.startsWith(originalNodeId)
+      n.agent_type === originalAgentType &&
+      n.id.startsWith(originalAgentBaseId)
     );
 
     const MAX_RETRY_ATTEMPTS = parseInt(process.env.MAX_RETRY_ATTEMPTS || 3, 10);
@@ -134,7 +134,7 @@ export class TaskStore {
       taskId,
       agent_type: 'RetryAgent',
       status: 'PLANNED',
-      input_data: { failedNodeId: failedGuardNodeId, originalNodeId: originalNodeId },
+      input_data: { failedGuardNodeId, originalNodeId },
       dependsOn: [failedGuardNodeId],
       result_data: null,
       cost: 0,
@@ -155,7 +155,9 @@ export class TaskStore {
     if (!originalNode) return null;
     
     const taskId = originalNode.taskId;
-    const newAgentId = `${originalNodeId}_v${(originalNode.attempt || 1) + 1}`;
+    const originalAgentBaseId = originalNodeId.replace(/_v\d+$/, '');
+    const newAttempt = (originalNode.attempt || 1) + 1;
+    const newAgentId = `${originalAgentBaseId}_v${newAttempt}`;
     
     // Создаем новый GuardAgent, который будет проверять новый генеративный узел
     const originalGuard = Array.from(nodes.values()).find(n => n.dependsOn.includes(originalNodeId) && n.agent_type === 'GuardAgent');
@@ -169,7 +171,7 @@ export class TaskStore {
         dependsOn: originalNode.dependsOn, // Зависит от тех же узлов, что и оригинал (кроме GuardAgent)
         result_data: null,
         cost: 0,
-        attempt: originalNode.attempt + 1,
+        attempt: newAttempt,
         is_retry: false,
     };
     nodes.set(newAgentId, newNode);
@@ -180,16 +182,18 @@ export class TaskStore {
         // Узел GuardAgent будет пересоздан для проверки нового генеративного узла. 
         // В упрощенном MVP мы просто обновляем зависимости оригинального GuardAgent.
         const originalGuardId = originalGuard.id;
-        const newGuardId = originalGuardId.includes('_v') ? `${originalGuardId.split('_v')[0]}_v${newNode.attempt}` : `${originalGuardId}_v${newNode.attempt}`;
+        const originalGuardBaseId = originalGuardId.replace(/_v\d+$/, '');
+        const newGuardId = `${originalGuardBaseId}_v${newAttempt}`;
 
         const newGuardNode = clone(originalGuard);
         newGuardNode.id = newGuardId;
         newGuardNode.dependsOn = [newAgentId]; // Теперь зависит от нового узла
         newGuardNode.status = 'PLANNED';
-        newGuardNode.attempt = newNode.attempt;
+        newGuardNode.attempt = newAttempt;
         newGuardNode.result_data = null;
+        newGuardNode.cost = 0;
 
-        nodes.set(originalGuardId, { ...originalGuard, status: 'SKIPPED_RETRY', result_data: { newGuardId } });
+        nodes.set(originalGuardId, { ...originalGuard, status: 'SKIPPED_RETRY', result_data: { nextGuard: newGuardId } });
         nodes.set(newGuardId, newGuardNode);
         tasks.get(taskId).nodes.push(newGuardId);
     }
