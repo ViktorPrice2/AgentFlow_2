@@ -1,5 +1,5 @@
 {
-  "task_name": "SuperProduct Launch Content",
+  "task_name": "Final Content Planning Task",
   "nodes": [
     {
       "id": "node1",
@@ -16,14 +16,20 @@
     {
       "id": "node3",
       "agent": "ImageAgent",
-      "input": { "description": "Key visual based on text" },
+      "input": { "description": "Key visual for social media post" },
       "dependsOn": ["node2"]
     },
     {
       "id": "node4",
+      "agent": "VideoAgent",
+      "input": { "style": "dynamic" },
+      "dependsOn": ["node2", "node3"]
+    },
+    {
+      "id": "node5",
       "agent": "GuardAgent",
-      "input": { "check": "image_quality" },
-      "dependsOn": ["node3"]
+      "input": { "check": "storyboard_validity" },
+      "dependsOn": ["node4"]
     }
   ]
 }
