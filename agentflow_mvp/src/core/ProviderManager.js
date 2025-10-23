@@ -2,12 +2,17 @@ import axios from 'axios';
 import { promises as fs } from 'fs';
 import path from 'path';
 import 'dotenv/config';
+import { GoogleGenAI } from '@google/genai';
 
 const getMockMode = () => process.env.MOCK_MODE === 'true';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1';
-const GEMINI_IMAGE_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta'; // Legacy /v1beta for Imagen
+
+const getGeminiClient = () => {
+  if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY is not set.');
+  return new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+};
 
 const MAX_RETRIES = 5;
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -38,13 +43,13 @@ const writeImageFile = async (model, buffer, mimeType = 'image/png') => {
   const absolutePath = path.join(RESULTS_DIR, fileName);
   await fs.writeFile(absolutePath, buffer);
   const relativePath = path.posix.join('results', fileName);
-  return { absolutePath, relativePath };
+  return { absolutePath, relativePath, mimeType };
 };
 
 const createPlaceholderImage = async (model = 'imagen-3.0-generate') =>
   writeImageFile(model, Buffer.from(PLACEHOLDER_PIXEL_BASE64, 'base64'), 'image/png');
 
-const sendRequestWithRetries = async (url, payload, axiosConfig, isImage = false) => {
+const sendRequestWithRetries = async (url, payload, axiosConfig) => {
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt += 1) {
     try {
       const response = await axios.post(url, payload, axiosConfig);
@@ -67,82 +72,69 @@ const sendRequestWithRetries = async (url, payload, axiosConfig, isImage = false
         await delay(backoffTime);
         continue;
       }
-
-      if (isImage && (status === 400 || status === 404)) {
-        throw error;
-      }
-
       throw error;
     }
   }
   throw new Error(`Failed after ${MAX_RETRIES} attempts.`);
 };
 
-// --- Image API Call (FINAL, RELIABLE IMAGEN) ---
+// --- SDK Image Call (FINAL, RELIABLE IMAGEN) ---
 const invokeImageModel = async (model, prompt) => {
-    if (!GEMINI_API_KEY) {
-        throw new Error('GEMINI_API_KEY is not set for image generation calls.');
+  if (getMockMode()) {
+    const { relativePath, mimeType } = await createPlaceholderImage(model);
+    return { result: { url: relativePath, mimeType }, tokens: 0, modelUsed: 'MockPlaceholder' };
+  }
+
+  if (!GEMINI_API_KEY) {
+    throw new Error('GEMINI_API_KEY is not set for image generation calls.');
+  }
+
+  const ai = getGeminiClient();
+  const targetModel = model || 'imagen-3.0-generate';
+  console.log(`[API CALL] Calling SDK IMAGEN for prompt: ${prompt.substring(0, 30)}...`);
+
+  try {
+    const response = await ai.models.generateImages({
+      model: targetModel,
+      prompt,
+      config: {
+        numberOfImages: 1,
+        outputMimeType: 'image/png',
+        aspectRatio: '1:1',
+      },
+    });
+
+    const candidate = response.generatedImages?.[0];
+    const base64Data = candidate?.image?.imageBytes;
+    const mimeType = candidate?.image?.mimeType || 'image/png';
+
+    if (!base64Data) {
+      const blockReason = response.promptFeedback?.safetyRatings?.[0]?.blockReason || 'Image generation failed silently.';
+      throw new Error(`SDK Imagen Generation Blocked: ${blockReason}`);
     }
 
-    const targetModel = 'imagen-3.0-generate';
-    // Используем generateImages для большей надежности
-    const url = `${GEMINI_IMAGE_API_BASE_URL}/models/${targetModel}:generateImages?key=${GEMINI_API_KEY}`;
-    console.log(`[API CALL] Calling IMAGEN generateImages for prompt: ${prompt.substring(0, 30)}...`);
-    
-    const axiosConfig = {
-        headers: { 'Content-Type': 'application/json' },
-        timeout: 120000,
-    };
+    const buffer = Buffer.from(base64Data, 'base64');
+    const { relativePath } = await writeImageFile(targetModel, buffer, mimeType);
+    const tokens = response.usageMetadata?.totalTokenCount || 0;
 
-    const payload = {
-        prompt: prompt,
-        config: {
-            number_of_images: 1,
-            output_mime_type: 'image/png',
-            aspectRatio: '1:1'
-        }
-    };
-
-    try {
-        const response = await sendRequestWithRetries(url, payload, axiosConfig, true);
-
-        const base64Data = response.data?.generated_images?.[0]?.image?.imageBytes;
-        const mimeType = response.data?.generated_images?.[0]?.image?.mimeType || 'image/png';
-
-        if (!base64Data) {
-            const blockReason = response.data?.safetyFeedback?.[0]?.blockReason || 'No image data returned (safety block?).';
-            throw new Error(`Imagen Generation Blocked: ${blockReason}`);
-        }
-
-        const buffer = Buffer.from(base64Data, 'base64');
-        const { relativePath } = await writeImageFile(targetModel, buffer, mimeType);
-        const tokens = response.data?.usageMetadata?.totalTokenCount || 0;
-        
-        return { result: { url: relativePath, mimeType }, tokens, modelUsed: targetModel };
-
-    } catch (error) {
-        // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: В случае сбоя API, возвращаем Placeholder Pixel и продолжаем работу
-        logAxiosError(error, 'Image API - Failure');
-        console.warn('[ImageAgent] API Failed. Reverting to Placeholder Pixel and continuing DAG.');
-        const { relativePath, mimeType } = await createPlaceholderImage(targetModel);
-        return { result: { url: relativePath, mimeType }, tokens: 0, modelUsed: 'MockPlaceholder' };
-    }
+    return { result: { url: relativePath, mimeType }, tokens, modelUsed: targetModel };
+  } catch (error) {
+    logAxiosError(error, 'Image API - SDK Failure');
+    console.warn('[ImageAgent] SDK Failed. Reverting to Placeholder Pixel and continuing DAG.');
+    const { relativePath, mimeType } = await createPlaceholderImage(targetModel);
+    return { result: { url: relativePath, mimeType }, tokens: 0, modelUsed: 'MockPlaceholder' };
+  }
 };
 
 export class ProviderManager {
   static async invoke(model, prompt, type = 'text') {
-    if (getMockMode()) {
-      if (type === 'image') {
-        // Используем mock для image в mock-режиме
-        const { relativePath } = await createPlaceholderImage(model);
-        return { result: { url: relativePath, mimeType: 'image/png' }, tokens: 0 };
-      }
-      const mockText = `MOCK: ${model} generated content for: ${prompt.substring(0, 50)}...`;
-      return { result: mockText, tokens: mockText.length / 4 };
-    }
-
     if (type === 'image' || (typeof model === 'string' && model.includes('imagen'))) {
       return invokeImageModel(model, prompt);
+    }
+
+    if (getMockMode()) {
+      const mockText = `MOCK: ${model} generated content for: ${prompt.substring(0, 50)}...`;
+      return { result: mockText, tokens: mockText.length / 4 };
     }
 
     // --- РЕАЛЬНЫЙ ВЫЗОВ GOOGLE GEMINI (TEXT) ---
