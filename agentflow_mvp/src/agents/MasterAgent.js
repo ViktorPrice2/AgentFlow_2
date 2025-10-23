@@ -11,17 +11,22 @@ const AGENT_MAP = {
   RetryAgent: (await import('./RetryAgent.js')).RetryAgent, // Убедитесь, что RetryAgent.js создан!
 };
 
-async function processJob(job) {
+async function processJob(job, onUpdate) {
   const { agentType, payload } = job;
   const { nodeId } = payload;
 
   // 1. Установка статуса RUNNING
   const node = TaskStore.updateNodeStatus(nodeId, 'RUNNING');
-  if (!node) return null;
+  if (node && typeof onUpdate === 'function') {
+    onUpdate(node.taskId);
+  }
 
   const AgentModule = AGENT_MAP[agentType];
   if (!AgentModule) {
     TaskStore.updateNodeStatus(nodeId, 'FAILED', { error: `Agent ${agentType} not found.` });
+    if (typeof onUpdate === 'function') {
+      onUpdate(node?.taskId || payload.taskId);
+    }
     return null;
   }
 
@@ -34,12 +39,16 @@ async function processJob(job) {
     console.error(`Worker error processing ${nodeId}:`, error.message);
   }
 
-  // 3. Возврат обновленного узла
-  return TaskStore.getNode(nodeId);
+  const updatedNode = TaskStore.getNode(nodeId);
+  if (updatedNode && typeof onUpdate === 'function') {
+    onUpdate(updatedNode.taskId);
+  }
+
+  return updatedNode;
 }
 
 export class MasterAgent {
-  static async runScheduler(taskId) {
+  static async runScheduler(taskId, onUpdate) {
     const task = TaskStore.getTask(taskId);
     if (!task) {
       console.error('Task not found.');
@@ -48,6 +57,9 @@ export class MasterAgent {
 
     if (task.status === 'CREATED') {
       task.status = 'RUNNING';
+      if (typeof onUpdate === 'function') {
+        onUpdate(taskId);
+      }
     }
 
     let completed = false;
@@ -63,7 +75,7 @@ export class MasterAgent {
       // 2. Исполнение: Обработка всех текущих Job
       while (!QueueService.isQueueEmpty()) {
         const job = QueueService.getJob();
-        const processedNode = await processJob(job);
+        const processedNode = await processJob(job, onUpdate);
 
         // 3. Логика Сбоя GuardAgent и Запуск RetryAgent
         if (processedNode && processedNode.status === 'FAILED' && processedNode.agent_type === 'GuardAgent') {
@@ -72,12 +84,14 @@ export class MasterAgent {
           
           if (retryNode) {
             console.log(`[Scheduler] Guard FAIL on ${processedNode.id}. Launching ${retryNode.id}...`);
-            // Запуск RetryAgent (который теперь появится в очереди readyNodes на следующей итерации)
-            // Мы просто переходим к следующей итерации цикла while (!completed), 
-            // чтобы MasterAgent подобрал только что созданный RetryAgent.
-          } else {
-            // Если достигнут максимум попыток, TaskStore вернет null, и мы помечаем задачу как FAILED
-            TaskStore.getTask(taskId).status = 'FAILED';
+            QueueService.addJob('RetryAgent', {
+              taskId,
+              nodeId: retryNode.id,
+              failedNodeId: processedNode.id,
+            });
+            if (typeof onUpdate === 'function') {
+              onUpdate(taskId);
+            }
           }
         }
       }
@@ -86,20 +100,24 @@ export class MasterAgent {
       const updatedTask = TaskStore.getTask(taskId);
       if (updatedTask.status === 'COMPLETED' || updatedTask.status === 'FAILED') {
         completed = true;
+        if (typeof onUpdate === 'function') {
+          onUpdate(taskId);
+        }
         break;
       }
 
-      // 5. Защита от бесконечного цикла и зависаний
-      if (readyNodes.length === 0 && QueueService.isQueueEmpty()) {
-          const allNodes = updatedTask.nodes.map(id => TaskStore.getNode(id));
-          const plannedCount = allNodes.filter(n => n && n.status === 'PLANNED').length;
-          
-          if (plannedCount > 0) {
-              // Зависание: есть PLANNED, но нет READY (зависимость FAILED)
-              console.warn('\n[Scheduler] Task Blocked. Transitioning to FAILED.');
-              updatedTask.status = 'FAILED'; // Блокировка из-за неустранимой ошибки
-          } 
-          completed = true; // Выход из цикла
+      if (!completed && readyNodes.length === 0 && QueueService.isQueueEmpty()) {
+        const allNodes = updatedTask.nodes.map(id => TaskStore.getNode(id));
+        const plannedCount = allNodes.filter(n => n && n.status === 'PLANNED').length;
+        const failedCount = allNodes.filter(n => n && n.status === 'FAILED').length;
+        if (plannedCount > 0) {
+          console.warn('\n[Scheduler] Task Blocked. Planned nodes remain, but no ready nodes. Check FAILED statuses.');
+        }
+        updatedTask.status = failedCount > 0 ? 'FAILED' : 'COMPLETED';
+        if (typeof onUpdate === 'function') {
+          onUpdate(taskId);
+        }
+        completed = true;
       }
     }
 

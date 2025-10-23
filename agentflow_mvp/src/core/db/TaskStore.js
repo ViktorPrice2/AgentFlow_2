@@ -23,6 +23,7 @@ export class TaskStore {
         id: nodeId,
         taskId,
         agent_type: nodeDef.agent,
+        agent: nodeDef.agent,
         status: 'PLANNED',
         input_data: clone(nodeDef.input) || {},
         dependsOn: [...(nodeDef.dependsOn || [])],
@@ -80,10 +81,12 @@ export class TaskStore {
       task.status = 'RUNNING';
     }
 
-    if (status === 'SUCCESS' || status === 'FAILED') {
+    const terminalStatuses = new Set(['SUCCESS', 'FAILED', 'MANUALLY_OVERRIDDEN', 'SKIPPED']);
+
+    if (terminalStatuses.has(status)) {
       const allCompleted = task.nodes.every(id => {
         const n = TaskStore.nodes.get(id);
-        return n && (n.status === 'SUCCESS' || n.status === 'FAILED');
+        return n && terminalStatuses.has(n.status);
       });
       if (allCompleted && task.status !== 'FAILED') {
         task.status = 'COMPLETED';
@@ -127,6 +130,7 @@ export class TaskStore {
       id: newId,
       taskId,
       agent_type: 'RetryAgent',
+      agent: 'RetryAgent',
       status: 'PLANNED',
       input_data: { failedNodeId },
       dependsOn: [],
@@ -141,6 +145,31 @@ export class TaskStore {
   }
 
   static createCorrectiveNode(originalNodeId, overrides = {}) {
+    if (arguments.length > 2) {
+      const [taskId, newNodeId, agentType, inputData, dependsOn] = arguments;
+      const task = TaskStore.tasks.get(taskId);
+      if (!task || TaskStore.nodes.has(newNodeId)) {
+        return null;
+      }
+
+      const newNode = {
+        id: newNodeId,
+        taskId,
+        agent_type: agentType,
+        agent: agentType,
+        status: 'PLANNED',
+        input_data: clone(inputData) || {},
+        dependsOn: [...(dependsOn || [])],
+        result_data: null,
+        cost: 0,
+      };
+
+      TaskStore.nodes.set(newNodeId, newNode);
+      task.nodes.push(newNodeId);
+      task.status = 'RUNNING';
+      return newNode;
+    }
+
     const originalNode = TaskStore.nodes.get(originalNodeId);
     if (!originalNode) return null;
     const task = TaskStore.tasks.get(originalNode.taskId);
@@ -167,6 +196,7 @@ export class TaskStore {
       id: newId,
       taskId: originalNode.taskId,
       agent_type: originalNode.agent_type,
+      agent: originalNode.agent || originalNode.agent_type,
       status: 'PLANNED',
       input_data: overrides.input_data ? clone(overrides.input_data) : clone(originalNode.input_data) || {},
       dependsOn: overrides.dependsOn ? [...overrides.dependsOn] : [...originalNode.dependsOn],
@@ -208,7 +238,7 @@ export class TaskStore {
     node.result_data = null;
 
     const task = TaskStore.tasks.get(node.taskId);
-    if (task && task.status !== 'FAILED') {
+    if (task) {
       task.status = 'RUNNING';
     }
 
