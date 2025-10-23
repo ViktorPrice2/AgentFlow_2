@@ -1,7 +1,7 @@
 import { ProviderManager } from '../core/ProviderManager.js';
 import { Logger } from '../core/Logger.js';
 import { TaskStore } from '../core/db/TaskStore.js';
-import { REELS_CHECKLIST, JSON_FORMAT_INSTRUCTION } from '../utils/expertPrompts.js';
+import { REELS_CHECKLIST, CINEMATIC_CONTINUITY_RULES, JSON_FORMAT_INSTRUCTION } from '../utils/expertPrompts.js';
 
 const VIDEO_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
@@ -88,7 +88,10 @@ export class VideoAgent {
     const promptSegments = [
       'Вы — креативный директор. Создайте сценарий видеоролика для Reels/TikTok (20-25 секунд).',
       REELS_CHECKLIST,
+      CINEMATIC_CONTINUITY_RULES,
       'Сценарий должен состоять из 3-х сцен (Хук, Ценность, CTA).',
+      'В каждой сцене опишите, как соблюдаются правила кинематографической связности (цвет, движение камеры, временная последовательность и масштаб).',
+      'Финальный video prompt должен подчеркнуть ключевые визуальные переходы и подтвердить применение правил кинематографической связности.',
       contextNarrative ? `Контекст для сценария: ${contextNarrative}` : '',
       scheduleDetails ? `Детали публикации: ${scheduleDetails}` : '',
       textResult ? `Используйте этот текст как основу для дикторского текста: ${textResult.substring(0, 500)}` : 'Если текста нет, придумайте убедительный дикторский текст самостоятельно.',
@@ -114,10 +117,16 @@ export class VideoAgent {
         throw new Error('LLM did not return valid JSON.');
       }
 
+      const continuityGuidelines = CINEMATIC_CONTINUITY_RULES;
+      if (typeof resultData.final_video_prompt === 'string' && !resultData.final_video_prompt.includes('ПРАВИЛА КИНЕМАТОГРАФИЧЕСКОЙ СВЯЗНОСТИ')) {
+        resultData.final_video_prompt = `${resultData.final_video_prompt}\n\n${continuityGuidelines}`;
+      }
+      resultData.cinematic_continuity_guidelines = continuityGuidelines;
+
       const costPerToken = 0.0000005;
       const cost = tokens * costPerToken;
 
-      logger.logStep(nodeId, 'END', { status: 'SUCCESS', storyboard_scenes: resultData.scenes.length, cost });
+      logger.logStep(nodeId, 'END', { status: 'SUCCESS', storyboard_scenes: resultData.scenes?.length || 0, cost });
 
       TaskStore.updateNodeStatus(nodeId, 'SUCCESS', resultData, cost);
       return resultData;
