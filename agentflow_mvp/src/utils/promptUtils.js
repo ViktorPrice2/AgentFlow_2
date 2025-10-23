@@ -1,5 +1,3 @@
-// src/utils/promptUtils.js
-
 const toneDictionary = {
   enthusiastic: 'энтузиастичном',
   casual: 'неформальном',

@@ -14,7 +14,10 @@ const io = new SocketIoServer(httpServer);
 const PORT = process.env.PORT || 3000;
 
 const DAG_PATH = path.join(process.cwd(), 'plans', 'dag.json');
+const PUBLIC_DIR = path.join(process.cwd(), 'public');
 const RESULTS_DIR = path.join(process.cwd(), 'results');
+const LOGS_DIR = path.join(process.cwd(), 'logs');
+
 let dagTemplate = '{}';
 try {
   dagTemplate = fs.readFileSync(DAG_PATH, 'utf-8');
@@ -23,7 +26,7 @@ try {
 }
 
 app.use(express.json());
-app.use(express.static(path.join(process.cwd(), 'public')));
+app.use(express.static(PUBLIC_DIR));
 
 if (!fs.existsSync(RESULTS_DIR)) {
   fs.mkdirSync(RESULTS_DIR, { recursive: true });
@@ -43,10 +46,12 @@ const applyMediaPreferences = (plan, { includeImage = true, includeVideo = false
       node.agent === 'ImageAgent' ||
       node.agent_type === 'ImageAgent' ||
       node.input?.check === 'image_quality';
+
+    const videoChecks = new Set(['video_quality', 'storyboard_validity']);
     const isVideoNode =
       node.agent === 'VideoAgent' ||
       node.agent_type === 'VideoAgent' ||
-      node.input?.check === 'video_quality';
+      (node.input && videoChecks.has(node.input.check));
 
     if ((!includeImage && isImageNode) || (!includeVideo && isVideoNode)) {
       removedIds.add(node.id);
@@ -61,7 +66,7 @@ const applyMediaPreferences = (plan, { includeImage = true, includeVideo = false
 
   if (removedIds.size > 0) {
     for (const node of nodesToKeep) {
-      if (Array.isArray(node.dependsOn)) {
+      if (Array.isArray(node.dependsOn) && node.dependsOn.length) {
         node.dependsOn = node.dependsOn.filter(dep => !removedIds.has(dep));
       }
     }
@@ -103,10 +108,16 @@ app.post('/api/tasks/start', async (req, res) => {
     }
 
     plan.task_name = taskName || plan.task_name;
-    plan.nodes[0].input = { topic: taskTopic, tone: taskTone };
+    const writerNode = plan.nodes.find(node => node.agent === 'WriterAgent' || node.agent_type === 'WriterAgent');
+    if (writerNode) {
+      writerNode.input = {
+        ...writerNode.input,
+        topic: taskTopic ?? writerNode.input?.topic,
+        tone: taskTone ?? writerNode.input?.tone,
+      };
+    }
 
-    const includeImageFlag =
-      includeImage === undefined ? true : includeImage === true || includeImage === 'true';
+    const includeImageFlag = includeImage === undefined ? true : includeImage === true || includeImage === 'true';
     const includeVideoFlag = includeVideo === true || includeVideo === 'true';
 
     const customizedPlan = applyMediaPreferences(plan, {
@@ -160,8 +171,24 @@ app.get('/api/tasks/:taskId', (req, res) => {
   res.json({ task, nodes });
 });
 
+app.get('/api/logs/:taskId', (req, res) => {
+  const { taskId } = req.params;
+  const logPath = path.join(LOGS_DIR, `${taskId}.log.jsonl`);
+  if (!fs.existsSync(logPath)) {
+    return res.status(404).send('Log file not found.');
+  }
+
+  try {
+    const content = fs.readFileSync(logPath, 'utf-8');
+    res.type('text/plain').send(content);
+  } catch (error) {
+    console.error(`Failed to read log for ${taskId}:`, error);
+    res.status(500).send('Unable to read log file.');
+  }
+});
+
 app.get('/api/logs/:taskId/:nodeId', (req, res) => {
-  const logPath = path.join(process.cwd(), 'logs', `${req.params.taskId}.log.jsonl`);
+  const logPath = path.join(LOGS_DIR, `${req.params.taskId}.log.jsonl`);
   if (!fs.existsSync(logPath)) {
     return res.status(404).send('Log file not found.');
   }

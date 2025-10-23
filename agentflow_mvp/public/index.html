@@ -14,8 +14,7 @@
         .status-success { background-color: #c8e6c9; }
         .status-failed { background-color: #ffcdd2; }
         .status-planned { background-color: #e0f7fa; }
-        .status-manually_overridden { background-color: #e6e6e6; }
-        .status-skipped { background-color: #e6e6e6; }
+        .status-manually_overridden, .status-skipped_retry { background-color: #e6e6e6; }
         .vis-network { height: 400px; border: 1px solid lightgray; }
         .flex-container { display: flex; gap: 20px; margin-top: 20px; flex-wrap: wrap; }
         .side-panel { flex: 1; min-width: 280px; }
@@ -23,26 +22,26 @@
         table { width: 100%; border-collapse: collapse; margin-top: 15px; }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
         ul { list-style: none; padding: 0; }
-        li.task-item { margin-bottom: 8px; padding: 6px 10px; border-radius: 4px; background: #f8f9fa; display: flex; justify-content: space-between; align-items: center; }
+        li.task-item { margin-bottom: 8px; padding: 6px 10px; border-radius: 4px; background: #f8f9fa; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
         li.task-item.active { border: 1px solid #007bff; background: #e3f2fd; }
         li.task-item span { margin-right: 8px; padding: 2px 6px; border-radius: 4px; font-size: 0.85rem; text-transform: uppercase; }
-        button { cursor: pointer; padding: 8px 12px; border: none; border-radius: 4px; background: #1976d2; color: white; }
-        button.secondary { background: #6c757d; }
-        button:disabled { opacity: 0.5; cursor: not-allowed; }
-        textarea { font-family: monospace; }
-        .task-form input, .task-form select { width: 100%; padding: 8px; margin-bottom: 10px; border-radius: 4px; border: 1px solid #ccc; }
-        .task-form button { width: 100%; }
-        .media-options { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
-        .checkbox { display: flex; align-items: center; gap: 6px; font-size: 0.95rem; color: #444; }
-        .checkbox input { width: auto; accent-color: #1976d2; }
-        .status-pill { font-weight: bold; padding: 2px 6px; border-radius: 4px; color: #333; }
-        pre { background: #f0f3f5; padding: 10px; border-radius: 4px; white-space: pre-wrap; word-break: break-word; }
-        .modal-backdrop { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10; }
-        .modal-content { background: white; margin: 5% auto; padding: 20px; width: 80%; max-width: 720px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
-        .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 10px; }
-        @media (max-width: 900px) {
-            .flex-container { flex-direction: column; }
-        }
+        button { cursor: pointer; padding: 8px 12px; border: none; border-radius: 4px; background: #1976d2; color: white; } 
+        button.secondary { background: #6c757d; } 
+        button:disabled { opacity: 0.5; cursor: not-allowed; } 
+        textarea { font-family: monospace; } 
+        .task-form input, .task-form select { width: 100%; padding: 8px; margin-bottom: 10px; border-radius: 4px; border: 1px solid #ccc; } 
+        .task-form button { width: 100%; } 
+        .media-options { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; } 
+        .checkbox { display: flex; align-items: center; gap: 6px; font-size: 0.95rem; color: #444; } 
+        .checkbox input { width: auto; accent-color: #1976d2; } 
+        .status-pill { font-weight: bold; padding: 2px 6px; border-radius: 4px; color: #333; } 
+        pre { background: #f0f3f5; padding: 10px; border-radius: 4px; white-space: pre-wrap; word-break: break-word; } 
+        .modal-backdrop { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10; } 
+        .modal-content { background: white; margin: 5% auto; padding: 20px; width: 80%; max-width: 720px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); } 
+        .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 10px; } 
+        @media (max-width: 900px) { 
+            .flex-container { flex-direction: column; } 
+        } 
     </style>
 </head>
 <body>
@@ -57,15 +56,16 @@
             <select id="taskTone">
                 <option value="enthusiastic">Энтузиастичный</option>
                 <option value="formal">Формальный</option>
+                <option value="friendly">Дружелюбный</option>
             </select>
             <div class="media-options">
                 <label class="checkbox">
                     <input type="checkbox" id="taskGenerateImage" checked>
-                    <span>Сгенерировать изображение</span>
+                    <span>Планировать изображение (Prompt)</span>
                 </label>
                 <label class="checkbox">
                     <input type="checkbox" id="taskGenerateVideo">
-                    <span>Сгенерировать видео (beta)</span>
+                    <span>Планировать видео (Storyboard)</span>
                 </label>
             </div>
             <button id="startTaskBtn">Запустить AgentFlow</button>
@@ -87,7 +87,7 @@
 
         <div id="promptModal" class="modal-backdrop">
             <div class="modal-content">
-                <h3>Редактировать промпт и перезапустить <span id="editNodeId"></span></h3>
+                <h3>Редактировать Промпт и Перезапустить <span id="editNodeId"></span></h3>
                 <p>Причина сбоя: <strong id="failReason"></strong></p>
                 <textarea id="newPromptArea" style="width: 100%; height: 200px;"></textarea>
                 <div class="modal-actions">
@@ -124,8 +124,8 @@
                 case 'failed': return { background: '#F5C9C9', border: '#dc3545' };
                 case 'running': return { background: '#FFF3E0', border: '#FFA500' };
                 case 'planned': return { background: '#E0F7FA', border: '#17a2b8' };
-                case 'manually_overridden': return { background: '#e6e6e6', border: '#6c757d' };
-                case 'skipped': return { background: '#e6e6e6', border: '#6c757d' };
+                case 'manually_overridden': 
+                case 'skipped_retry': return { background: '#e6e6e6', border: '#6c757d' };
                 default: return { background: '#dfe9f3', border: '#90a4ae' };
             }
         }
@@ -142,15 +142,23 @@
             nodesData.forEach(node => {
                 const status = (node.status || '').toLowerCase();
                 const labelAgent = node.agent || node.agent_type || 'Unknown';
+                
+                // Игнорируем SKIPPED_RETRY узлы для чистоты DAG, но сохраняем их в данных
+                if (status === 'skipped_retry') return;
+
                 visNodes.push({
                     id: node.id,
-                    label: `${labelAgent}\n(${node.id})\n${node.status}`,
+                    label: `${labelAgent.replace('Agent', '')}\n(${node.id})\n${node.status}`,
                     color: getColorByStatus(status),
                     shape: 'box',
                     nodeData: node
                 });
+                
                 if (Array.isArray(node.dependsOn)) {
                     node.dependsOn.forEach(depId => {
+                        const depNode = nodesData.find(n => n.id === depId);
+                        // Пропускаем создание ребра, если зависимый узел был SKIPPED_RETRY
+                        if (depNode?.status.toLowerCase() === 'skipped_retry') return;
                         visEdges.push({ from: depId, to: node.id, arrows: 'to' });
                     });
                 }
@@ -179,8 +187,8 @@
                 const taskName = document.getElementById('taskName').value;
                 const taskTopic = document.getElementById('taskTopic').value;
                 const taskTone = document.getElementById('taskTone').value;
-                const includeImage = taskGenerateImage ? taskGenerateImage.checked : true;
-                const includeVideo = taskGenerateVideo ? taskGenerateVideo.checked : false;
+                const includeImage = taskGenerateImage.checked;
+                const includeVideo = taskGenerateVideo.checked;
 
                 const response = await fetch('/api/tasks/start', {
                     method: 'POST',
@@ -193,8 +201,7 @@
                     throw new Error(payload.message || 'Не удалось создать задачу.');
                 }
 
-                alert(payload.message);
-                await fetchTasks();
+                selectTask(payload.taskId, true);
             } catch (error) {
                 alert(error.message || 'Произошла ошибка при запуске задачи.');
             } finally {
@@ -214,17 +221,18 @@
 
         function renderTaskList(tasks) {
             tasksContainer.innerHTML = '';
+            tasks.sort((a, b) => b.id.localeCompare(a.id));
             tasks.forEach(task => {
                 const li = document.createElement('li');
                 li.className = 'task-item' + (task.id === activeTaskId ? ' active' : '');
-                const statusClass = `status-${(task.status || '').toLowerCase()}`;
+                const statusClass = `status-${(task.status || '').toLowerCase()}`; 
                 li.innerHTML = `
                     <span class="status-pill ${statusClass}">${task.status}</span>
-                    <a href="#" data-task-id="${task.id}">${task.name}</a>
+                    <a href="#" data-task-id="${task.id}" title="${task.name}">${task.name.substring(0, 30)}...</a>
                 `;
                 li.querySelector('a').addEventListener('click', event => {
                     event.preventDefault();
-                    selectTask(task.id);
+                    selectTask(task.id, false);
                 });
                 tasksContainer.appendChild(li);
             });
@@ -233,80 +241,89 @@
         async function selectTask(taskId, scrollIntoView = true) {
             try {
                 const response = await fetch(`/api/tasks/${taskId}`);
-                if (!response.ok) {
-                    throw new Error('Задача не найдена');
-                }
+                if (!response.ok) throw new Error('Задача не найдена');
                 const { task, nodes } = await response.json();
                 activeTaskId = taskId;
                 taskTitle.textContent = task?.name ? `— ${task.name}` : '';
                 drawNetwork(nodes, taskId);
-                if (scrollIntoView) {
-                    document.querySelector(`[data-task-id="${taskId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
-                if (nodes.length) {
-                    showNodeDetails(nodes[0]);
-                } else {
-                    nodeDetailsContainer.innerHTML = '<p>Нет узлов для отображения.</p>';
-                }
+                if (nodes.length) showNodeDetails(nodes.find(n => n.id === network?.getSelectedNodes?.()[0]) || nodes.find(n => n.status === 'FAILED') || nodes[nodes.length - 1]);
+                else nodeDetailsContainer.innerHTML = '<p>Нет узлов для отображения.</p>';
+                
                 Array.from(tasksContainer.querySelectorAll('li.task-item')).forEach(li => {
-                    const anchor = li.querySelector('a[data-task-id]');
-                    if (anchor) {
-                        li.classList.toggle('active', anchor.dataset.taskId === activeTaskId);
-                    }
+                    li.classList.toggle('active', li.querySelector('a')?.dataset.taskId === activeTaskId);
                 });
             } catch (error) {
                 alert(error.message || 'Ошибка при загрузке задачи.');
             }
         }
 
+        function getInitialPrompt(node) {
+            const originalInput = node.input_data || {};
+            if (node.agent_type === 'WriterAgent') {
+                 return originalInput.promptOverride || `Write an ${originalInput.tone} article about ${originalInput.topic}.`;
+            }
+            if (node.agent_type === 'ImageAgent') {
+                 return originalInput.promptOverride || originalInput.description || 'Key visual for the campaign';
+            }
+            return JSON.stringify(originalInput, null, 2);
+        }
+
         function showNodeDetails(node) {
             if (!node) return;
             const statusClass = `status-${(node.status || '').toLowerCase()}`;
             const cost = Number.isFinite(node.cost) ? node.cost : 0;
+            const initialPrompt = getInitialPrompt(node);
+            
             let html = `
-                <h3>Узел: ${node.id} (${node.agent || node.agent_type})</h3>
+                <h3>Узел: ${node.id} (${node.agent_type.replace('Agent', ' Agent')})</h3>
                 <p><strong>Статус:</strong> <span class="status-pill ${statusClass}">${node.status}</span></p>
                 <p><strong>Стоимость:</strong> $${cost.toFixed(4)}</p>
                 <p><strong>Зависимости:</strong> ${(node.dependsOn || []).join(', ') || '—'}</p>
-                <h4>Входные данные</h4>
-                <pre>${JSON.stringify(node.input_data || {}, null, 2)}</pre>
+                
+                <h4>Промпт для агента (Вход)</h4>
+                <pre class="prompt-input">${initialPrompt}</pre>
             `;
 
             if (node.result_data) {
-                html += `<h4>Результат</h4><pre>${JSON.stringify(node.result_data, null, 2)}</pre>`;
+                // Показываем итоговый промпт, если он есть в результатах (для Image/Video Planning)
+                const finalPrompt = node.result_data.finalImagePrompt || node.result_data.final_video_prompt;
+                if (finalPrompt) {
+                    html += `<h4>Итоговый Сгенерированный Промпт:</h4><pre>${finalPrompt}</pre>`;
+                }
+                html += `<h4>Полный Результат</h4><pre>${JSON.stringify(node.result_data, null, 2)}</pre>`;
             }
 
             if (node.status === 'FAILED') {
-                html += `<p><strong class="status-failed">Узел завершился с ошибкой.</strong></p>`;
-                html += `<a href="/api/logs/${node.taskId}/${node.id}" target="_blank"><button class="secondary">Посмотреть лог</button></a>`;
-                if (node.agent === 'GuardAgent' || node.agent_type === 'GuardAgent') {
-                    html += `<button style="margin-left: 10px;" onclick="openPromptModal('${node.id}')">Редактировать промпт</button>`;
+                html += `<p><strong class="status-failed">Узел завершился с ошибкой. Причина:</strong> ${node.result_data?.reason || 'Проверьте лог.'}</p>`;
+                html += `<a href="/api/logs/${node.taskId}" target="_blank"><button class="secondary">Посмотреть Лог Задачи</button></a>`;
+                if (node.agent_type === 'GuardAgent') {
+                    html += `<button style="margin-left: 10px;" onclick="openPromptModal('${node.id}', '${node.result_data?.reason || 'Неизвестно'}')">Редактировать Промпт и Перезапустить</button>`;
                 }
             }
 
             nodeDetailsContainer.innerHTML = html;
         }
 
-        function openPromptModal(nodeId) {
-            pendingRestartNode = nodeId;
-            editNodeId.textContent = nodeId;
-            const nodeData = visData.nodes.get(nodeId)?.nodeData;
-            const dependencyId = nodeData?.dependsOn?.[0];
-            const dependencyNode = dependencyId ? visData.nodes.get(dependencyId)?.nodeData : null;
-            failReason.textContent = nodeData?.result_data?.reason || 'Неизвестная причина';
+        function openPromptModal(failedGuardId, reason) {
+            pendingRestartNode = failedGuardId;
+            editNodeId.textContent = failedGuardId;
+            failReason.textContent = reason;
 
-            let defaultPrompt = '';
+            const nodeData = visData.nodes.get(failedGuardId)?.nodeData;
+            const dependencyId = nodeData?.dependsOn?.[0]; // Узел, который нужно исправить
+            const dependencyNode = dependencyId ? visData.nodes.get(dependencyId)?.nodeData : null;
+
             if (dependencyNode) {
-                const input = dependencyNode.input_data || {};
-                defaultPrompt = input.promptOverride || JSON.stringify(input, null, 2);
+                const currentPrompt = getInitialPrompt(dependencyNode);
+                newPromptArea.value = currentPrompt;
             }
-            newPromptArea.value = defaultPrompt;
             promptModal.style.display = 'block';
         }
 
         async function submitManualRestart() {
             if (!pendingRestartNode || !activeTaskId) return;
             submitPromptBtn.disabled = true;
+            
             try {
                 const newPrompt = newPromptArea.value;
                 const response = await fetch(`/api/tasks/${activeTaskId}/restart/${pendingRestartNode}`, {
@@ -315,10 +332,10 @@
                     body: JSON.stringify({ newPrompt })
                 });
                 const payload = await response.json();
-                if (!response.ok) {
-                    throw new Error(payload.message || 'Не удалось перезапустить узел.');
-                }
-                alert(payload.message);
+
+                if (!response.ok) throw new Error(payload.message || 'Не удалось перезапустить узел.');
+                
+                alert(`Перезапуск: ${payload.message}`);
                 closePromptModal();
             } catch (error) {
                 alert(error.message || 'Ошибка при ручном перезапуске.');
@@ -327,19 +344,17 @@
             }
         }
 
-        function closePromptModal() {
-            promptModal.style.display = 'none';
-            pendingRestartNode = null;
-        }
+        function closePromptModal() { promptModal.style.display = 'none'; pendingRestartNode = null; }
 
         socket.on('task-update', update => {
             if (!update || !update.taskId) return;
             if (update.taskId === activeTaskId) {
                 drawNetwork(update.nodes || [], update.taskId);
+                // Обновляем детали выбранного узла, если он FAILED или выбран
                 const selectedNodeId = network?.getSelectedNodes?.()[0];
                 if (selectedNodeId) {
                     const nodeEntry = visData.nodes.get(selectedNodeId);
-                    showNodeDetails(nodeEntry?.nodeData);
+                    if (nodeEntry) showNodeDetails(nodeEntry.nodeData);
                 }
             }
             fetchTasks();
@@ -347,16 +362,10 @@
 
         submitPromptBtn.addEventListener('click', submitManualRestart);
         cancelPromptBtn.addEventListener('click', closePromptModal);
-        promptModal.addEventListener('click', event => {
-            if (event.target === promptModal) {
-                closePromptModal();
-            }
-        });
+        promptModal.addEventListener('click', event => { if (event.target === promptModal) { closePromptModal(); } });
         startTaskBtn.addEventListener('click', startTask);
 
-        window.onload = () => {
-            fetchTasks();
-        };
+        window.onload = () => { fetchTasks(); };
     </script>
 </body>
 </html>
