@@ -12,13 +12,17 @@ const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1';
 export class ProviderManager {
   static async invoke(model, prompt, type = 'text') {
     if (getMockMode()) {
-      // ... (Оставить Mock-логику без изменений) ...
       if (type === 'image') {
         const imagePath = `results/imagen-3.0-generate_${Math.random().toString(36).substring(2, 8)}.png`;
         return { result: { url: imagePath }, tokens: 0 };
       }
       const mockText = `MOCK: ${model} generated content for: ${prompt.substring(0, 50)}...`;
       return { result: mockText, tokens: mockText.length / 4 };
+    }
+
+    if (type === 'image' || model.includes('imagen')) {
+      const imagePath = `results/${model || 'imagen-3.0-generate'}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.png`;
+      return { result: { url: imagePath }, tokens: 0 };
     }
 
     // --- РЕАЛЬНЫЙ ВЫЗОВ GOOGLE GEMINI ---
@@ -33,7 +37,7 @@ export class ProviderManager {
 
       const axiosConfig = {
         headers: { 'Content-Type': 'application/json' },
-        timeout: 120000, // Таймаут для предотвращения socket hang up
+        timeout: 60000, // Таймаут для предотвращения socket hang up
       };
 
       const payload = {
@@ -89,11 +93,6 @@ export class ProviderManager {
       }
     }
     
-    // Fallback для Image Agent (оставляем Mock)
-    if (type === 'image') {
-       return this.invoke('imagen-3.0-generate', prompt, 'image'); 
-    }
-
     throw new Error(`Provider not configured for model: ${model}`);
   }
 }

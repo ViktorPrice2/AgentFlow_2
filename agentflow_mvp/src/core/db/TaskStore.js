@@ -42,6 +42,14 @@ export class TaskStore {
     return tasks.get(taskId);
   }
 
+  static getAllTasks() {
+    return tasks;
+  }
+
+  static getAllNodes() {
+    return nodes;
+  }
+
   static getReadyNodes(taskId) {
     const task = tasks.get(taskId);
     if (!task || (task.status !== 'RUNNING' && task.status !== 'CREATED')) return [];
@@ -216,8 +224,8 @@ export class TaskStore {
 
       // Отмечаем GuardAgent как SKIPPED_RETRY
       TaskStore.updateNodeStatus(failedGuardNodeId, 'SKIPPED_RETRY', { nextAttempt: correctiveNodeId });
-      
-      return true;
+
+      return nodes.get(failedGuardNodeId);
   }
 
 }

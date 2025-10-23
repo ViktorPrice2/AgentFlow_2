@@ -5,22 +5,44 @@ import { Logger } from '../core/Logger.js';
 import { TaskStore } from '../core/db/TaskStore.js';
 
 let forcedFailureConsumed = false;
+const guardFailureHistory = new Set();
 
-function shouldFailGuard() {
-  const flag = process.env.FORCE_GUARD_FAIL || 'false';
-  if (flag !== 'once') {
-    // Сброс флага, если это не 'once', для многократных запусков
-    forcedFailureConsumed = false;
-  }
+function getGuardBaseId(nodeId) {
+  return typeof nodeId === 'string' ? nodeId.replace(/_v\d+$/, '') : nodeId;
+}
+
+function shouldFailGuard(node) {
+  const flag = (process.env.FORCE_GUARD_FAIL || 'false').toLowerCase();
+
   if (flag === 'true') {
     return true;
   }
-  if (flag === 'once' && !forcedFailureConsumed) {
-    forcedFailureConsumed = true;
+
+  if (flag === 'once') {
+    if (!forcedFailureConsumed) {
+      forcedFailureConsumed = true;
+      return true;
+    }
+    return false;
+  }
+
+  if (process.env.MOCK_MODE === 'true') {
+    return false;
+  }
+
+  const baseId = getGuardBaseId(node?.id);
+  if (!baseId) {
+    return false;
+  }
+
+  const failureKey = `${node?.taskId || 'global'}:${baseId}`;
+
+  if (!guardFailureHistory.has(failureKey)) {
+    guardFailureHistory.add(failureKey);
     return true;
   }
-  // 20% шанс сбоя в реальном режиме, если FORCE_GUARD_FAIL не установлен
-  return process.env.MOCK_MODE !== 'true' && Math.random() < 0.2; 
+
+  return false;
 }
 
 export class GuardAgent {
@@ -38,7 +60,7 @@ export class GuardAgent {
     const contentToValidate = prevResult?.text || prevResult?.imagePath || 'No Content';
 
     try {
-      const shouldFail = shouldFailGuard();
+      const shouldFail = shouldFailGuard(node);
 
       if (shouldFail) {
         const reason = 'TONE_MISMATCH: Content was too formal.';
