@@ -8,6 +8,8 @@ const AGENT_MAP = {
   VideoAgent: (await import('./VideoAgent.js')).VideoAgent, // VideoPromptAgent
   GuardAgent: (await import('./GuardAgent.js')).GuardAgent,
   RetryAgent: (await import('./RetryAgent.js')).RetryAgent,
+  ProductAnalysisAgent: (await import('./ProductAnalysisAgent.js')).ProductAnalysisAgent,
+  StrategyAgent: (await import('./StrategyAgent.js')).StrategyAgent,
 };
 
 async function processJob(job, onUpdate) {

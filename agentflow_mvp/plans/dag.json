@@ -1,35 +1,47 @@
 {
-  "task_name": "Final Content Planning Task",
+  "task_name": "Стратегия Продвижения (Анализ + Планирование)",
   "nodes": [
     {
-      "id": "node1",
+      "id": "node1_write",
       "agent": "WriterAgent",
       "input": { "topic": "SuperProduct", "tone": "enthusiastic" },
       "dependsOn": []
     },
     {
-      "id": "node2",
+      "id": "node2_guard",
       "agent": "GuardAgent",
       "input": { "check": "tone" },
-      "dependsOn": ["node1"]
+      "dependsOn": ["node1_write"]
     },
     {
-      "id": "node3",
+      "id": "node3_product_analysis",
+      "agent": "ProductAnalysisAgent",
+      "input": { "topic": "SuperProduct" },
+      "dependsOn": ["node2_guard"]
+    },
+    {
+      "id": "node4_strategy",
+      "agent": "StrategyAgent",
+      "input": { "topic": "Стратегический план" },
+      "dependsOn": ["node3_product_analysis"]
+    },
+    {
+      "id": "node5_image",
       "agent": "ImageAgent",
       "input": { "description": "Key visual for social media post" },
-      "dependsOn": ["node2"]
+      "dependsOn": ["node2_guard"]
     },
     {
-      "id": "node4",
+      "id": "node6_video",
       "agent": "VideoAgent",
       "input": { "style": "dynamic" },
-      "dependsOn": ["node2", "node3"]
+      "dependsOn": ["node2_guard", "node5_image"]
     },
     {
-      "id": "node5",
+      "id": "node7_video_guard",
       "agent": "GuardAgent",
       "input": { "check": "storyboard_validity" },
-      "dependsOn": ["node4"]
+      "dependsOn": ["node6_video"]
     }
   ]
 }
