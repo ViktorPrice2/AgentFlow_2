@@ -116,33 +116,20 @@ function hasAny(text, markers) {
 
 function countMarkers(text, markers) {
   const normalized = normalize(text);
-  if (!normalized || markers.length === 0) {
+  if (!normalized || !markers || markers.length === 0) {
     return 0;
   }
-  const matches = text.match(/!/g);
-  return matches ? matches.length : 0;
-}
-
-  return markers.reduce((total, marker) => {
-    if (!marker) {
-      return total;
-    }
-
   let total = 0;
-
   for (const marker of markers) {
     if (!marker) {
       continue;
     }
-
     let searchIndex = normalized.indexOf(marker);
-
     while (searchIndex !== -1) {
       total += 1;
       searchIndex = normalized.indexOf(marker, searchIndex + marker.length);
     }
   }
-
   return total;
 }
 
