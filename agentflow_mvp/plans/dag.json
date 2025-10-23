@@ -26,22 +26,16 @@
       "dependsOn": ["node1_analyze"]
     },
     {
-      "id": "node3_image_prompt",
-      "agent": "ImageAgent",
-      "input": { "description": "Key visual for social media post" },
-      "dependsOn": ["node2_guard"]
+      "id": "node3_human_review",
+      "agent": "HumanGateAgent",
+      "input": { "reason": "Awaiting strategy review and metrics input/update." },
+      "dependsOn": ["node2_strategy"]
     },
     {
-      "id": "node4_video_prompt",
-      "agent": "VideoAgent",
-      "input": { "style": "dynamic" },
-      "dependsOn": ["node2_guard", "node3_image_prompt"]
-    },
-    {
-      "id": "node5_review_strategy",
+      "id": "node4_review_strategy",
       "agent": "StrategyReviewAgent",
       "input": { "review_period": "5_days" },
-      "dependsOn": ["node2_strategy"]
+      "dependsOn": ["node3_human_review"]
     }
   ]
 }

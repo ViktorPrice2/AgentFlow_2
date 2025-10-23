@@ -377,6 +377,39 @@ app.post('/api/tasks/:taskId/schedule/update', (req, res) => {
   res.json({ success: true, scheduleItem: updatedItem });
 });
 
+app.post('/api/tasks/:taskId/unblock/:nodeId', (req, res) => {
+  const { taskId, nodeId } = req.params;
+  const node = TaskStore.getNode(nodeId);
+
+  if (!node || node.taskId !== taskId) {
+    return res.status(404).json({ success: false, message: 'Node not found for this task.' });
+  }
+
+  if (node.agent_type !== 'HumanGateAgent' || node.status !== 'PAUSED') {
+    return res.status(400).json({ success: false, message: 'Node is not awaiting human approval.' });
+  }
+
+  const logger = new Logger(taskId);
+  logger.logStep(nodeId, 'UNPAUSE', { message: 'Approved by human and metrics entered.' });
+
+  TaskStore.updateNodeStatus(nodeId, 'SUCCESS', { message: 'Approved by human and metrics entered.' });
+
+  const task = TaskStore.getTask(taskId);
+  if (task) {
+    task.status = 'RUNNING';
+    TaskStore.saveToDisk();
+  }
+
+  broadcastTaskUpdate(taskId);
+
+  MasterAgent.runScheduler(taskId, broadcastTaskUpdate).catch(error => {
+    console.error(`Scheduler error after unblock:`, error);
+    broadcastTaskUpdate(taskId);
+  });
+
+  res.json({ success: true, message: `Node ${nodeId} unblocked. Strategy review will now commence.` });
+});
+
 app.post('/api/tasks/:taskId/schedule/generate/:index', async (req, res) => {
   const { taskId, index } = req.params;
 
