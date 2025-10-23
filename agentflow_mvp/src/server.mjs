@@ -80,7 +80,8 @@ app.post('/api/tasks/start', async (req, res) => {
 });
 
 app.get('/api/tasks', (req, res) => {
-  const tasksList = Array.from(TaskStore.tasks.entries()).map(([id, task]) => ({
+  const tasksMap = TaskStore.tasks instanceof Map ? TaskStore.tasks : new Map();
+  const tasksList = Array.from(tasksMap.entries()).map(([id, task]) => ({
     id,
     name: task.name,
     status: task.status,

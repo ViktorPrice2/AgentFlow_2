@@ -33,13 +33,11 @@ export class ProviderManager {
 
       try {
           const response = await axios.post(url, {
-            // КОРРЕКТНЫЙ СТРУКТУРА PAYLOAD для generateContent
+            // КОРРЕКТНАЯ СТРУКТУРА PAYLOAD для generateContent
             contents: [{ role: "user", parts: [{ text: prompt }] }],
-            // Добавим safetySettings, чтобы избежать блокировки (опционально)
-            // Добавим температуру для более творческих ответов
-            config: {
-                temperature: 0.7 
-            }
+            generationConfig: {
+              temperature: 0.7,
+            },
           }, {
             headers: { 'Content-Type': 'application/json' }
           });
