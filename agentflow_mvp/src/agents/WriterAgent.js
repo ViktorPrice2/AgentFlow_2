@@ -1,6 +1,3 @@
-// src/agents/WriterAgent.js
-// Файл input_file_2.js
-
 import { ProviderManager } from '../core/ProviderManager.js';
 import { Logger } from '../core/Logger.js';
 import { TaskStore } from '../core/db/TaskStore.js';
@@ -35,8 +32,7 @@ export class WriterAgent {
         },
       };
 
-      // Стоимость для Gemini Flash - ниже, чем GPT-4
-      const costPerToken = 0.0000005; 
+      const costPerToken = 0.0000005;
       const cost = tokens * costPerToken;
 
       logger.logStep(nodeId, 'END', {

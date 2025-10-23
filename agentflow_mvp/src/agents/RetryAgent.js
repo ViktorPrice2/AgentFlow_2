@@ -30,7 +30,7 @@ export class RetryAgent {
         return;
     }
 
-    const dependencyId = failedGuardNode.dependsOn?.[0];
+    const dependencyId = failedGuardNode.dependsOn?.[0]; 
     const dependencyNode = TaskStore.getNode(dependencyId);
 
     if (!dependencyNode) {
@@ -41,22 +41,28 @@ export class RetryAgent {
 
     const reason = failedGuardNode.result_data?.reason || 'Unknown failure reason';
     const originalInput = clone(dependencyNode.input_data);
+    
+    // Пытаемся извлечь исходный тон для коррекции
+    const expectedTone = originalInput.tone || 'neutral'; 
 
-    logger.logStep(nodeId, 'START', {
+    logger.logStep(nodeId, 'START', { 
       message: `Generating corrective prompt for ${dependencyId}`,
       reason,
+      expectedTone,
     });
 
-    const originalPromptText = originalInput.promptOverride ||
-      ((originalInput.tone || originalInput.topic)
-        ? buildRussianArticlePrompt(originalInput.topic, originalInput.tone)
+    const originalPromptText = originalInput.promptOverride || 
+      ((originalInput.tone || originalInput.topic) 
+        ? buildRussianArticlePrompt(originalInput.topic, originalInput.tone) 
         : originalInput.rawPrompt || 'исходный запрос');
 
+    // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ ЛОГИКИ: Просим LLM сгенерировать промпт, который исправит сбой и усилит требуемый тон.
     const correctionPrompt = [
-      `Предыдущая попытка сгенерировать контент завершилась ошибкой по причине: ${reason}.`,
-      `Исходный промпт: ${originalPromptText}.`,
-      'Сформулируй исправленный промпт на русском языке, сохранив исходное намерение пользователя и устранив проблему.',
-      'Верни только текст обновленного промпта без дополнительных пояснений.',
+      `Предыдущая попытка сгенерировать контент завершилась ошибкой по причине: ${reason}.`, 
+      `Контент был проверен на соответствие тону: "${expectedTone}".`, 
+      `Исходный промпт: ${originalPromptText}.`, 
+      'Сформулируй НОВЫЙ, исправленный промпт, который явно **усилит** требуемый тон и **избежит** предыдущей ошибки.', 
+      'Верни только текст обновленного промпта без дополнительных пояснений. Промпт должен быть коротким.',
     ].join(' ');
 
     try {
@@ -64,15 +70,15 @@ export class RetryAgent {
       const { result: newPromptText } = await ProviderManager.invoke(model, correctionPrompt, 'text');
 
       const updatedInput = clone(originalInput);
-      updatedInput.promptOverride = newPromptText.trim();
+      updatedInput.promptOverride = newPromptText.trim(); 
       updatedInput.retryCount = (originalInput.retryCount || 0) + 1;
 
       const correctiveNode = TaskStore.createCorrectiveNode(dependencyId, updatedInput);
-
+      
       if (!correctiveNode) {
           throw new Error('Max retry limit reached or failed to create corrective node.');
       }
-
+      
       TaskStore.prepareNodeForRetry(failedGuardNodeId, correctiveNode.id);
 
       TaskStore.updateNodeStatus(nodeId, 'SUCCESS', {
