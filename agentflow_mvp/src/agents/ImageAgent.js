@@ -33,6 +33,10 @@ export class ImageAgent {
         },
       };
 
+      if (imageData.mimeType) {
+        resultData.metadata.mimeType = imageData.mimeType;
+      }
+
       logger.logStep(nodeId, 'END', { status: 'SUCCESS', path: resultData.imagePath });
 
       TaskStore.updateNodeStatus(nodeId, 'SUCCESS', resultData);
