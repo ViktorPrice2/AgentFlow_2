@@ -25,7 +25,8 @@ try {
   console.warn(`Failed to load DAG template at ${DAG_PATH}:`, error.message);
 }
 
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.static(PUBLIC_DIR));
 
 if (!fs.existsSync(RESULTS_DIR)) {
