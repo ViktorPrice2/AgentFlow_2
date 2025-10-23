@@ -214,4 +214,23 @@ export class TaskStore {
 
     return node;
   }
+
+  static createCorrectiveNode(newId, agentType, inputData, dependencies) {
+    const taskId = Array.from(nodes.values()).find(n => n.id === dependencies[0])?.taskId;
+    if (!taskId) return null;
+
+    nodes.set(newId, {
+        id: newId,
+        taskId,
+        agent_type: agentType,
+        status: 'PLANNED',
+        input_data: inputData,
+        dependsOn: dependencies, // Новый узел зависит от тех же узлов, что и оригинал
+        result_data: null,
+        cost: 0,
+        is_retry: true
+    });
+    tasks.get(taskId).nodes.push(newId);
+    return newId;
+  }
 }
