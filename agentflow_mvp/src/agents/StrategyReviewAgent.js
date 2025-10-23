@@ -169,20 +169,27 @@ export class StrategyReviewAgent {
       const extendedSchedule = currentSchedule.concat(normalizedExtension);
       TaskStore.updateTaskSchedule(node.taskId, extendedSchedule);
 
+      const nextCycle = TaskStore.createNextStrategyCycle(node.taskId, nodeId);
+
       logger.logStep(nodeId, 'END', {
         status: 'SUCCESS',
         analysis: mockResult.analysis,
         newItems: normalizedExtension.length,
         mode: 'MOCK',
+        nextCycle,
       });
 
       TaskStore.updateNodeStatus(
         nodeId,
         'SUCCESS',
-        { analysis: mockResult.analysis, extension_schedule: normalizedExtension },
+        {
+          analysis: mockResult.analysis,
+          extension_schedule: normalizedExtension,
+          next_cycle: nextCycle,
+        },
         0
       );
-      return;
+      return { analysis: mockResult.analysis, extension_schedule: normalizedExtension, next_cycle: nextCycle };
     }
 
     const reviewPrompt = [
@@ -216,16 +223,20 @@ export class StrategyReviewAgent {
       const extendedSchedule = currentSchedule.concat(normalizedExtension);
       TaskStore.updateTaskSchedule(node.taskId, extendedSchedule);
 
+      const nextCycle = TaskStore.createNextStrategyCycle(node.taskId, nodeId);
+
       const cost = tokens * 0.0000005;
       logger.logStep(nodeId, 'END', {
         status: 'SUCCESS',
         analysis: agentResult.analysis,
         newItems: normalizedExtension.length,
         cost,
+        nextCycle,
       });
 
-      TaskStore.updateNodeStatus(nodeId, 'SUCCESS', agentResult, cost);
-      return agentResult;
+      const agentResultWithCycle = { ...agentResult, next_cycle: nextCycle };
+      TaskStore.updateNodeStatus(nodeId, 'SUCCESS', agentResultWithCycle, cost);
+      return agentResultWithCycle;
     } catch (error) {
       logger.logStep(nodeId, 'ERROR', { message: `Failed to review strategy: ${error.message}` });
       TaskStore.updateNodeStatus(nodeId, 'FAILED', { error: error.message });

@@ -604,4 +604,70 @@ export class TaskStore {
       return nodes.get(failedGuardNodeId);
   }
 
+  /**
+   * Создает новый цикл из HumanGate и StrategyReviewAgent, чтобы продолжить стратегическое планирование.
+   * @param {string} taskId
+   * @param {string} lastNodeId
+   * @returns {{ newHumanGateId: string, newStrategyReviewId: string } | null}
+   */
+  static createNextStrategyCycle(taskId, lastNodeId) {
+    const task = tasks.get(taskId);
+    if (!task) {
+      return null;
+    }
+
+    const lastNode = nodes.get(lastNodeId);
+    if (!lastNode || lastNode.taskId !== taskId) {
+      return null;
+    }
+
+    const baseStrategyId = lastNodeId.replace(/_v\d+$/, '');
+    const dependencyBaseId = Array.isArray(lastNode.dependsOn) && lastNode.dependsOn.length > 0
+      ? lastNode.dependsOn[0].replace(/_v\d+$/, '')
+      : 'node3_human_review';
+
+    const existingReviewNodes = Array.from(nodes.values()).filter(
+      node => node?.taskId === taskId && node.id.startsWith(baseStrategyId) && node.agent_type === 'StrategyReviewAgent'
+    );
+
+    let cycleIndex = existingReviewNodes.length;
+    let newHumanGateId = `${dependencyBaseId}_v${cycleIndex}`;
+    let newStrategyReviewId = `${baseStrategyId}_v${cycleIndex}`;
+
+    while (nodes.has(newHumanGateId) || nodes.has(newStrategyReviewId)) {
+      cycleIndex += 1;
+      newHumanGateId = `${dependencyBaseId}_v${cycleIndex}`;
+      newStrategyReviewId = `${baseStrategyId}_v${cycleIndex}`;
+    }
+
+    const humanGateNode = normalizeNode(newHumanGateId, {
+      id: newHumanGateId,
+      taskId,
+      agent_type: 'HumanGateAgent',
+      status: 'PLANNED',
+      input_data: {
+        reason: `Awaiting metrics input and strategy review for Cycle ${cycleIndex}.`,
+      },
+      dependsOn: [lastNodeId],
+    });
+
+    const strategyReviewNode = normalizeNode(newStrategyReviewId, {
+      id: newStrategyReviewId,
+      taskId,
+      agent_type: 'StrategyReviewAgent',
+      status: 'PLANNED',
+      input_data: { review_period: `Cycle ${cycleIndex}` },
+      dependsOn: [newHumanGateId],
+    });
+
+    nodes.set(newHumanGateId, humanGateNode);
+    nodes.set(newStrategyReviewId, strategyReviewNode);
+    task.nodes.push(newHumanGateId, newStrategyReviewId);
+
+    ensureTaskStatusConsistency(taskId);
+    TaskStore.saveToDisk();
+
+    return { newHumanGateId, newStrategyReviewId };
+  }
+
 }
