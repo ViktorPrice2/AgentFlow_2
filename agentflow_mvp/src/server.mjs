@@ -14,6 +14,7 @@ const io = new SocketIoServer(httpServer);
 const PORT = process.env.PORT || 3000;
 
 const DAG_PATH = path.join(process.cwd(), 'plans', 'dag.json');
+const RESULTS_DIR = path.join(process.cwd(), 'results');
 let dagTemplate = '{}';
 try {
   dagTemplate = fs.readFileSync(DAG_PATH, 'utf-8');
@@ -23,6 +24,11 @@ try {
 
 app.use(express.json());
 app.use(express.static(path.join(process.cwd(), 'public')));
+
+if (!fs.existsSync(RESULTS_DIR)) {
+  fs.mkdirSync(RESULTS_DIR, { recursive: true });
+}
+app.use('/results', express.static(RESULTS_DIR));
 
 const broadcastTaskUpdate = taskId => {
   const taskData = TaskStore.getTask(taskId);
