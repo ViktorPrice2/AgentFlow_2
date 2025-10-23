@@ -494,12 +494,29 @@ ${node.status}`,
                 return;
             }
 
-            const strategyNode = visData.nodes.get('node2_strategy')?.nodeData;
-            const humanGateNode = visData.nodes.get('node3_human_review')?.nodeData;
-            const isStrategyComplete = strategyNode?.status === 'SUCCESS';
-            const isPaused = humanGateNode?.status === 'PAUSED';
-            const isHumanGateComplete = humanGateNode?.status === 'SUCCESS';
-            const hasHumanGate = Boolean(humanGateNode);
+            const visNodesArray = typeof visData?.nodes?.get === 'function'
+                ? visData.nodes.get({ returnType: 'array' })
+                : [];
+            const nodesDataList = Array.isArray(visNodesArray)
+                ? visNodesArray.map(entry => entry?.nodeData).filter(Boolean)
+                : [];
+
+            const strategyNode = nodesDataList.find(node => {
+                const agentType = (node.agent_type || node.agent || '').toLowerCase();
+                return agentType === 'strategyagent';
+            });
+
+            const humanGateNodes = nodesDataList.filter(node => {
+                const agentType = (node.agent_type || node.agent || '').toLowerCase();
+                return agentType === 'humangateagent';
+            });
+
+            const pausedHumanGateNode = humanGateNodes.find(node => (node.status || '').toUpperCase() === 'PAUSED');
+            const completedHumanGateNode = humanGateNodes.find(node => (node.status || '').toUpperCase() === 'SUCCESS');
+            const isStrategyComplete = (strategyNode?.status || '').toUpperCase() === 'SUCCESS';
+            const isPaused = Boolean(pausedHumanGateNode);
+            const isHumanGateComplete = Boolean(completedHumanGateNode);
+            const hasHumanGate = humanGateNodes.length > 0;
 
             const awaitingHumanInput = hasHumanGate && isPaused;
             const strategyReady = isStrategyComplete;
@@ -627,8 +644,8 @@ ${node.status}`,
                 </div>
             `;
 
-            if (isPaused && humanGateNode) {
-                html += `<button style="margin-top: 20px;" onclick="unblockHumanGate('${taskId}', '${humanGateNode.id}')">Одобрить Расписание и Продолжить Анализ</button>`;
+            if (isPaused && pausedHumanGateNode?.id) {
+                html += `<button style="margin-top: 20px;" onclick="unblockHumanGate('${taskId}', '${pausedHumanGateNode.id}')">Одобрить Расписание и Продолжить Анализ</button>`;
             }
 
             scheduleContainer.innerHTML = html;
@@ -750,6 +767,15 @@ ${node.status}`,
             }
 
             try {
+                const editableFields = scheduleContainer.querySelectorAll('input[data-field], textarea[data-field]');
+                editableFields.forEach(field => {
+                    field.dispatchEvent(new Event('change'));
+                });
+
+                if (editableFields.length) {
+                    await new Promise(resolve => setTimeout(resolve, 120));
+                }
+
                 const response = await fetch(`/api/tasks/${taskId}/unblock/${nodeId}`, { method: 'POST' });
                 const payload = await response.json().catch(() => ({}));
                 if (!response.ok) {
