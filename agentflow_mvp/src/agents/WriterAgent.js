@@ -4,6 +4,7 @@
 import { ProviderManager } from '../core/ProviderManager.js';
 import { Logger } from '../core/Logger.js';
 import { TaskStore } from '../core/db/TaskStore.js';
+import { buildRussianArticlePrompt } from '../utils/promptUtils.js';
 
 const DEFAULT_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
@@ -20,7 +21,7 @@ export class WriterAgent {
     // Используем promptOverride, если он есть (это результат RetryAgent)
     const basePrompt = node.input_data?.promptOverride
       ? node.input_data.promptOverride
-      : `Write an ${node.input_data.tone} article about ${node.input_data.topic}.`;
+      : buildRussianArticlePrompt(node.input_data?.topic, node.input_data?.tone);
 
     try {
       const { result: text, tokens } = await ProviderManager.invoke(DEFAULT_MODEL, basePrompt, 'text');
