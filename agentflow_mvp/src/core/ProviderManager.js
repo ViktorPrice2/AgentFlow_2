@@ -1,28 +1,53 @@
 // src/core/ProviderManager.js
 
 import axios from 'axios';
+import { promises as fs } from 'fs';
+import path from 'path';
 import 'dotenv/config';
 
 const getMockMode = () => process.env.MOCK_MODE === 'true';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 // ИСПОЛЬЗУЕМ КОРРЕКТНУЮ V1 КОНЕЧНУЮ ТОЧКУ
-const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1'; 
+const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1';
+
+const RESULTS_DIR = path.join(process.cwd(), 'results');
+const PLACEHOLDER_PIXEL_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==';
+
+const ensureResultsDir = async () => {
+  await fs.mkdir(RESULTS_DIR, { recursive: true });
+};
+
+const sanitiseModelName = modelName =>
+  (modelName || 'imagen-3.0-generate').replace(/[^a-z0-9._-]/gi, '_');
+
+const buildImageFileName = model =>
+  `${sanitiseModelName(model)}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.png`;
+
+const createPlaceholderImage = async (model = 'imagen-3.0-generate') => {
+  const fileName = buildImageFileName(model);
+  await ensureResultsDir();
+  const absolutePath = path.join(RESULTS_DIR, fileName);
+  await fs.writeFile(absolutePath, Buffer.from(PLACEHOLDER_PIXEL_BASE64, 'base64'));
+  const relativePath = path.posix.join('results', fileName);
+  return { absolutePath, relativePath };
+};
 
 export class ProviderManager {
   static async invoke(model, prompt, type = 'text') {
     if (getMockMode()) {
       if (type === 'image') {
-        const imagePath = `results/imagen-3.0-generate_${Math.random().toString(36).substring(2, 8)}.png`;
-        return { result: { url: imagePath }, tokens: 0 };
+        const { relativePath } = await createPlaceholderImage(model);
+        return { result: { url: relativePath }, tokens: 0 };
       }
       const mockText = `MOCK: ${model} generated content for: ${prompt.substring(0, 50)}...`;
       return { result: mockText, tokens: mockText.length / 4 };
     }
 
-    if (type === 'image' || model.includes('imagen')) {
-      const imagePath = `results/${model || 'imagen-3.0-generate'}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.png`;
-      return { result: { url: imagePath }, tokens: 0 };
+    if (type === 'image' || (typeof model === 'string' && model.includes('imagen'))) {
+      const { relativePath } = await createPlaceholderImage(model);
+      return { result: { url: relativePath }, tokens: 0 };
     }
 
     // --- РЕАЛЬНЫЙ ВЫЗОВ GOOGLE GEMINI ---
