@@ -153,9 +153,7 @@ app.post('/api/tasks/:taskId/restart/:nodeId', (req, res) => {
 
   parsedInput.retryCount = (dependencyNode.input_data?.retryCount || 0) + 1;
 
-  const correctiveNode = TaskStore.createCorrectiveNode(dependencyId, {
-    input_data: parsedInput,
-  });
+  const correctiveNode = TaskStore.createCorrectiveNode(dependencyId, parsedInput);
 
   if (!correctiveNode) {
     return res.status(500).json({ success: false, message: 'Failed to create corrective node.' });
