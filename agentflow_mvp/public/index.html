@@ -23,11 +23,12 @@
         .main-content { flex: 2; min-width: 480px; }
         table { width: 100%; border-collapse: collapse; margin-top: 15px; table-layout: fixed; }
         .schedule-table { table-layout: fixed; min-width: 100%; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; word-break: break-word; white-space: normal; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; word-break: break-word; white-space: normal; vertical-align: top; box-sizing: border-box; }
         ul { list-style: none; padding: 0; }
         li.task-item { margin-bottom: 8px; padding: 6px 10px; border-radius: 4px; background: #f8f9fa; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
         li.task-item.active { border: 1px solid #007bff; background: #e3f2fd; }
         li.task-item span { margin-right: 8px; padding: 2px 6px; border-radius: 4px; font-size: 0.85rem; text-transform: uppercase; }
+        li.task-item button { margin-left: 10px; padding: 4px 8px; font-size: 0.8rem; }
         button { cursor: pointer; padding: 8px 12px; border: none; border-radius: 4px; background: #1976d2; color: white; } 
         button.secondary { background: #6c757d; } 
         button:disabled { opacity: 0.5; cursor: not-allowed; } 
@@ -62,7 +63,7 @@
         .schedule-table th:nth-child(9), .schedule-table td:nth-child(9) { width: 2.5%; }
         .schedule-table th:nth-child(10), .schedule-table td:nth-child(10) { width: 2.5%; }
         .schedule-table input { width: 100%; max-width: 100%; box-sizing: border-box; padding: 6px; border-radius: 4px; border: 1px solid #ccd4dd; }
-        .schedule-table textarea { width: 100%; min-height: 90px; resize: vertical; box-sizing: border-box; padding: 6px; border-radius: 4px; border: 1px solid #ccd4dd; font-family: inherit; }
+        .schedule-table textarea { width: 100%; max-width: 100%; min-height: 90px; resize: vertical; box-sizing: border-box; padding: 6px; border-radius: 4px; border: 1px solid #ccd4dd; font-family: inherit; }
         .schedule-table input[type="number"] { min-width: 70px; }
         .content-cell { display: flex; flex-direction: column; gap: 6px; }
         .content-meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -216,13 +217,13 @@
 
         function getScheduleStatusInfo(status) {
             const normalized = (status || '').toUpperCase();
-            if (normalized === 'CONTENT_READY' || normalized === 'CONTENT_GENERATED') {
+            if (['CONTENT_READY', 'CONTENT_GENERATED', 'DONE', 'READY'].includes(normalized)) {
                 return { label: 'Готово', className: 'status-success' };
             }
-            if (normalized === 'CONTENT_GENERATING') {
+            if (['CONTENT_GENERATING', 'GENERATING', 'IN_PROGRESS'].includes(normalized)) {
                 return { label: 'Генерация', className: 'status-running' };
             }
-            if (normalized === 'CONTENT_FAILED' || normalized === 'GENERATION_FAILED') {
+            if (['CONTENT_FAILED', 'GENERATION_FAILED', 'FAILED'].includes(normalized)) {
                 return { label: 'Ошибка', className: 'status-failed' };
             }
             return { label: 'План', className: 'status-planned' };
@@ -236,6 +237,7 @@
                 .replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
+                .replace(/'/g, '&apos;')
                 .replace(/"/g, '&quot;');
         }
 
@@ -377,17 +379,63 @@ ${node.status}`,
             tasks.forEach(task => {
                 const li = document.createElement('li');
                 li.className = 'task-item' + (task.id === activeTaskId ? ' active' : '');
-                const statusClass = `status-${(task.status || '').toLowerCase()}`;
+                const statusText = task.status || 'UNKNOWN';
+                const statusClass = `status-${statusText.toLowerCase().replace(/[^a-z0-9_-]/g, '-')}`;
+                const displayName = task?.name || task.id;
+                const trimmedName = displayName.length > 30 ? `${displayName.slice(0, 30)}…` : displayName;
+                const safeTitle = escapeHtml(displayName);
+                const safeLabel = escapeHtml(trimmedName);
+                const safeStatus = escapeHtml(statusText);
+                const safeTaskId = escapeHtml(task.id);
+
                 li.innerHTML = `
-                    <span class="status-pill ${statusClass}">${task.status}</span>
-                    <a href="#" data-task-id="${task.id}" title="${task.name}">${task.name.substring(0, 30)}...</a>
+                    <span class="status-pill ${statusClass}">${safeStatus}</span>
+                    <a href="#" data-task-id="${safeTaskId}" title="${safeTitle}">${safeLabel}</a>
+                    <button type="button" class="secondary delete-task-btn" data-task-id="${safeTaskId}">Удалить</button>
                 `;
+
                 li.querySelector('a').addEventListener('click', event => {
                     event.preventDefault();
                     selectTask(task.id, false);
                 });
+
+                const deleteButton = li.querySelector('.delete-task-btn');
+                deleteButton.addEventListener('click', event => {
+                    deleteTask(event, task.id);
+                });
+
                 tasksContainer.appendChild(li);
             });
+        }
+
+        async function deleteTask(event, taskId) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            if (!taskId) {
+                return;
+            }
+
+            const confirmed = window.confirm(`Вы уверены, что хотите удалить задачу ${taskId} и все связанные данные?`);
+            if (!confirmed) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
+                const payload = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    throw new Error(payload.message || 'Не удалось удалить задачу.');
+                }
+
+                if (activeTaskId === taskId) {
+                    resetTaskView();
+                }
+
+                fetchTasks();
+            } catch (error) {
+                alert(error.message || 'Не удалось удалить задачу.');
+            }
         }
 
         async function selectTask(taskId, scrollIntoView = true) {
@@ -416,6 +464,23 @@ ${node.status}`,
             }
         }
 
+        function resetTaskView() {
+            taskTitle.textContent = '';
+            activeTaskId = null;
+            currentSchedule = [];
+            visData.nodes.clear();
+            visData.edges.clear();
+            if (network) {
+                network.setData({ nodes: visData.nodes, edges: visData.edges });
+            }
+            nodeDetailsContainer.innerHTML = '<p>Выберите задачу для просмотра деталей.</p>';
+            scheduleContainer.innerHTML = '';
+            if (scheduleChart) {
+                scheduleChart.destroy();
+                scheduleChart = null;
+            }
+        }
+
         function renderSchedule(schedule, taskId) {
             if (!scheduleContainer) return;
             currentSchedule = Array.isArray(schedule) ? schedule : [];
@@ -435,17 +500,26 @@ ${node.status}`,
             const isPaused = humanGateNode?.status === 'PAUSED';
             const isHumanGateComplete = humanGateNode?.status === 'SUCCESS';
             const hasHumanGate = Boolean(humanGateNode);
-            const isPlanApproved = isStrategyComplete && (hasHumanGate ? isHumanGateComplete : true);
-            const canEditPlan = isPlanApproved;
-            const planDisabledAttr = canEditPlan ? '' : 'disabled';
-            const metricsDisabledAttr = isPaused ? '' : 'disabled';
-            const generatorDisabledAttr = (isPaused || isPlanApproved) ? '' : 'disabled';
 
-            const statusNotice = isPaused
-                ? 'Расписание ожидает подтверждения и ввода метрик.'
-                : isPlanApproved
-                    ? 'Расписание одобрено. Можно корректировать план и темы.'
-                    : 'Расписание формируется автоматически.';
+            const awaitingHumanInput = hasHumanGate && isPaused;
+            const strategyReady = isStrategyComplete;
+            const planEditable = strategyReady && (!hasHumanGate || isHumanGateComplete || isPaused);
+            const metricsEditable = (!hasHumanGate && strategyReady) || isPaused || isHumanGateComplete;
+            const generatorEnabled = strategyReady && (!hasHumanGate || isHumanGateComplete || isPaused);
+
+            const planDisabledAttr = planEditable ? '' : 'disabled';
+            const metricsDisabledAttr = metricsEditable ? '' : 'disabled';
+            const generatorDisabledAttr = generatorEnabled ? '' : 'disabled';
+
+            const statusNotice = awaitingHumanInput
+                ? 'Расписание ожидает подтверждения. Можно скорректировать план и ввести метрики.'
+                : isHumanGateComplete
+                    ? 'Расписание одобрено. Можно корректировать план и генерировать контент.'
+                    : strategyReady
+                        ? hasHumanGate
+                            ? 'Расписание сформировано и ожидает подтверждения.'
+                            : 'Расписание сформировано. Доступно редактирование и генерация контента.'
+                        : 'Расписание формируется автоматически.';
 
             let html = `
                 <div class="schedule-header">
@@ -841,6 +915,18 @@ ${node.status}`,
                     if (nodeEntry) showNodeDetails(nodeEntry.nodeData);
                 }
             }
+            fetchTasks();
+        });
+
+        socket.on('task-removed', payload => {
+            if (!payload || !payload.taskId) {
+                return;
+            }
+
+            if (payload.taskId === activeTaskId) {
+                resetTaskView();
+            }
+
             fetchTasks();
         });
 
