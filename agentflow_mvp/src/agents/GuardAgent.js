@@ -18,6 +18,9 @@ const FORMAL_MARKERS = [
   'обязательств',
   'сообщаем',
   'предоставляем',
+  'сообщить вам',
+  'информируем вас',
+  'уведомляю',
 ];
 
 const ENTHUSIASTIC_MARKERS = [
@@ -33,6 +36,12 @@ const ENTHUSIASTIC_MARKERS = [
   'кайф',
   'энерг',
   'в восторг',
+  'бомбичес',
+  'ваще',
+  'безумно',
+  '🔥',
+  '✨',
+  '😍',
 ];
 
 const CASUAL_MARKERS = [
@@ -45,7 +54,56 @@ const CASUAL_MARKERS = [
   'честно',
   'смотрите',
   'как же',
+  'ну что',
+  'ну давайте',
+  'прикиньте',
 ];
+
+const FRIENDLY_MARKERS = [
+  'друзья',
+  'команда',
+  'рады',
+  'делюсь',
+  'поделимся',
+  'вместе',
+  'будем рады',
+  'обнимаем',
+  'приглашаем',
+  '😊',
+  '❤️',
+];
+
+const PLAYFUL_MARKERS = [
+  'игрив',
+  'весел',
+  'шут',
+  'ха-ха',
+  'приключ',
+  'озорн',
+  'шалост',
+  'ура',
+  '😉',
+  '😁',
+];
+
+const TONE_ALIASES = {
+  'super casual': 'casual',
+  'super-casual': 'casual',
+  'very casual': 'casual',
+  'очень неформальный': 'casual',
+  'неформальный': 'casual',
+  'энтузиастичный': 'enthusiastic',
+  'супер-энтузиастичный': 'enthusiastic',
+  'супер энтузиастичный': 'enthusiastic',
+  'очень энтузиастичный': 'enthusiastic',
+  'дружелюбный': 'friendly',
+  'очень дружелюбный': 'friendly',
+  'игривый': 'playful',
+  'профессиональный': 'professional',
+  'деловой': 'professional',
+  'официальный': 'formal',
+  'формальный': 'formal',
+};
 
 function normalize(text) {
   return typeof text === 'string' ? text.trim().toLowerCase() : '';
@@ -54,6 +112,32 @@ function normalize(text) {
 function hasAny(text, markers) {
   const normalized = normalize(text);
   return markers.some(marker => normalized.includes(marker));
+}
+
+function countMarkers(text, markers) {
+  const normalized = normalize(text);
+  if (!normalized || markers.length === 0) {
+    return 0;
+  }
+  const matches = text.match(/!/g);
+  return matches ? matches.length : 0;
+}
+
+  return markers.reduce((total, marker) => {
+    if (!marker) {
+      return total;
+    }
+
+    let count = 0;
+    let searchIndex = normalized.indexOf(marker);
+
+    while (searchIndex !== -1) {
+      count += 1;
+      searchIndex = normalized.indexOf(marker, searchIndex + marker.length);
+    }
+
+    return total + count;
+  }, 0);
 }
 
 function countExclamations(text) {
@@ -70,65 +154,78 @@ function detectToneIssue(content, expectedTone) {
   }
 
   const normalizedTone = normalize(expectedTone);
+  const toneKey = TONE_ALIASES[normalizedTone] || normalizedTone;
   const lowerContent = normalize(content);
 
   if (process.env.MOCK_MODE === 'true') {
     return null;
   }
 
-  if (normalizedTone === 'enthusiastic') {
+  if (toneKey === 'enthusiastic') {
     const exclamations = countExclamations(content);
-    const hasExcitedWord = hasAny(lowerContent, ENTHUSIASTIC_MARKERS);
-    const soundsFormal = hasAny(lowerContent, FORMAL_MARKERS);
+    const enthusiasticScore = countMarkers(lowerContent, ENTHUSIASTIC_MARKERS);
+    const formalScore = countMarkers(lowerContent, FORMAL_MARKERS);
 
-    if (!hasExcitedWord && exclamations === 0 && soundsFormal) {
-      return 'TONE_MISMATCH: Content sounds formal and lacks enthusiastic markers.';
+    const hasStrongFormalTone = formalScore >= 2;
+    const lacksEnergeticSignals = enthusiasticScore === 0 && exclamations === 0;
+    const borderlineEnergetic = enthusiasticScore <= 1 && exclamations <= 1;
+
+    if (hasStrongFormalTone && lacksEnergeticSignals) {
+      return 'TONE_MISMATCH: Текст выглядит официальным и не содержит эмоциональных маркеров.';
     }
 
-    if (!hasExcitedWord && exclamations === 0) {
-      return 'TONE_MISMATCH: Content lacks enthusiastic expressions (no exclamation marks or energetic vocabulary).';
-    }
-
-    return null;
-  }
-
-  if (normalizedTone === 'casual') {
-    const hasCasualMarker = hasAny(lowerContent, CASUAL_MARKERS);
-    const soundsFormal = hasAny(lowerContent, FORMAL_MARKERS);
-
-    if (!hasCasualMarker && soundsFormal) {
-      return 'TONE_MISMATCH: Content звучит слишком официально для заявленного непринужденного тона.';
-    }
-
-    if (!hasCasualMarker && countExclamations(content) === 0) {
-      return 'TONE_MISMATCH: Текст не содержит разговорных маркеров или эмоциональных восклицаний.';
+    if (formalScore >= 3 && borderlineEnergetic) {
+      return 'TONE_MISMATCH: Слишком много канцелярита для энергичного тона.';
     }
 
     return null;
   }
 
-  if (normalizedTone === 'friendly') {
-    const friendlyMarkers = ['друзья', 'команда', 'рады', 'делюсь', 'поделимся', 'вместе'];
-    if (!hasAny(lowerContent, friendlyMarkers) && !hasAny(lowerContent, CASUAL_MARKERS)) {
-      return 'TONE_MISMATCH: Текст не звучит дружелюбно — нет обращений к аудитории.';
+  if (toneKey === 'casual') {
+    const casualScore = countMarkers(lowerContent, CASUAL_MARKERS);
+    const formalScore = countMarkers(lowerContent, FORMAL_MARKERS);
+
+    if (formalScore >= 2 && casualScore === 0) {
+      return 'TONE_MISMATCH: Текст звучит официально вместо непринужденного общения.';
     }
+
+    if (formalScore >= 3 && casualScore <= 1) {
+      return 'TONE_MISMATCH: В тексте преобладают деловые обороты и почти нет разговорных выражений.';
+    }
+
     return null;
   }
 
-  if (normalizedTone === 'playful') {
-    const playfulMarkers = ['игрив', 'весел', 'шут', 'ха-ха', 'приключ'];
-    const hasPlayfulMarker = hasAny(lowerContent, playfulMarkers) || countExclamations(content) > 0;
-    if (!hasPlayfulMarker) {
-      return 'TONE_MISMATCH: Не обнаружены игривые элементы или эмоции.';
+  if (toneKey === 'friendly') {
+    const friendlyScore = countMarkers(lowerContent, FRIENDLY_MARKERS) + countMarkers(lowerContent, CASUAL_MARKERS);
+    const formalScore = countMarkers(lowerContent, FORMAL_MARKERS);
+
+    if (friendlyScore === 0 && formalScore >= 2) {
+      return 'TONE_MISMATCH: Для дружелюбного сообщения не хватает теплых обращений, зато много официальных фраз.';
     }
+
     return null;
   }
 
-  if (normalizedTone === 'professional' || normalizedTone === 'formal') {
-    const hasSlang = hasAny(lowerContent, [...CASUAL_MARKERS, ...ENTHUSIASTIC_MARKERS]);
-    if (hasSlang) {
-      return 'TONE_MISMATCH: Слишком разговорные выражения для профессионального/официального тона.';
+  if (toneKey === 'playful') {
+    const playfulScore = countMarkers(lowerContent, PLAYFUL_MARKERS);
+    const exclamations = countExclamations(content);
+
+    if (playfulScore === 0 && exclamations <= 1) {
+      return 'TONE_MISMATCH: Не видно игривого настроения — добавьте эмоций или легких шуток.';
     }
+
+    return null;
+  }
+
+  if (toneKey === 'professional' || toneKey === 'formal') {
+    const slangScore = countMarkers(lowerContent, [...CASUAL_MARKERS, ...ENTHUSIASTIC_MARKERS]);
+    const exclamations = countExclamations(content);
+
+    if (slangScore >= 2 || (slangScore > 0 && exclamations >= 2)) {
+      return 'TONE_MISMATCH: Слишком разговорные выражения для профессионального или официального текста.';
+    }
+
     return null;
   }
 
