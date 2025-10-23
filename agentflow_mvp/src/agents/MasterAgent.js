@@ -8,15 +8,21 @@ const AGENT_MAP = {
   RetryAgent: (await import('./RetryAgent.js')).RetryAgent,
 };
 
-async function processJob(job) {
+async function processJob(job, onUpdate) {
   const { agentType, payload } = job;
   const { nodeId } = payload;
 
   const node = TaskStore.updateNodeStatus(nodeId, 'RUNNING');
+  if (node && typeof onUpdate === 'function') {
+    onUpdate(node.taskId);
+  }
 
   const AgentModule = AGENT_MAP[agentType];
   if (!AgentModule) {
     TaskStore.updateNodeStatus(nodeId, 'FAILED', { error: `Agent ${agentType} not found.` });
+    if (typeof onUpdate === 'function') {
+      onUpdate(node?.taskId || payload.taskId);
+    }
     return null;
   }
 
@@ -26,11 +32,16 @@ async function processJob(job) {
     console.error(`Worker error processing ${nodeId}:`, error.message);
   }
 
-  return TaskStore.getNode(nodeId);
+  const updatedNode = TaskStore.getNode(nodeId);
+  if (updatedNode && typeof onUpdate === 'function') {
+    onUpdate(updatedNode.taskId);
+  }
+
+  return updatedNode;
 }
 
 export class MasterAgent {
-  static async runScheduler(taskId) {
+  static async runScheduler(taskId, onUpdate) {
     const task = TaskStore.getTask(taskId);
     if (!task) {
       console.error('Task not found.');
@@ -39,6 +50,9 @@ export class MasterAgent {
 
     if (task.status === 'CREATED') {
       task.status = 'RUNNING';
+      if (typeof onUpdate === 'function') {
+        onUpdate(taskId);
+      }
     }
 
     let completed = false;
@@ -52,7 +66,7 @@ export class MasterAgent {
 
       while (!QueueService.isQueueEmpty()) {
         const job = QueueService.getJob();
-        const processedNode = await processJob(job);
+        const processedNode = await processJob(job, onUpdate);
 
         if (processedNode && processedNode.status === 'FAILED' && processedNode.agent_type === 'GuardAgent') {
           const retryNode = TaskStore.createRetryAgentNode(taskId, processedNode.id);
@@ -63,6 +77,9 @@ export class MasterAgent {
               nodeId: retryNode.id,
               failedNodeId: processedNode.id,
             });
+            if (typeof onUpdate === 'function') {
+              onUpdate(taskId);
+            }
           }
         }
       }
@@ -70,6 +87,9 @@ export class MasterAgent {
       const updatedTask = TaskStore.getTask(taskId);
       if (updatedTask.status === 'COMPLETED' || updatedTask.status === 'FAILED') {
         completed = true;
+        if (typeof onUpdate === 'function') {
+          onUpdate(taskId);
+        }
         break;
       }
 
@@ -81,6 +101,9 @@ export class MasterAgent {
           console.warn('\n[Scheduler] Task Blocked. Planned nodes remain, but no ready nodes. Check FAILED statuses.');
         }
         updatedTask.status = failedCount > 0 ? 'FAILED' : 'COMPLETED';
+        if (typeof onUpdate === 'function') {
+          onUpdate(taskId);
+        }
         completed = true;
       }
     }

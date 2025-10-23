@@ -1,11 +1,21 @@
 {
   "name": "agentflow_mvp",
   "version": "1.0.0",
-  "description": "AgentFlow 2.0 MVP Skeleton",
-  "main": "src/orchestrate.mjs",
+  "description": "AgentFlow 2.0 MVP Skeleton with Web UI (150/100)",
+  "main": "src/server.mjs",
   "type": "module",
   "scripts": {
-    "start": "node src/orchestrate.mjs",
-    "test": "node --test tests/e2e.test.js"
+    "start": "node src/server.mjs",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "dotenv": "^16.3.1",
+    "axios": "^1.6.2",
+    "express": "^4.18.2",
+    "socket.io": "^4.7.2",
+    "vis-network": "^9.1.2"
+  },
+  "devDependencies": {
+    "vitest": "^1.0.1"
   }
 }
