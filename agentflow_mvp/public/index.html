@@ -5,6 +5,7 @@
     <title>AgentFlow 2.0 Панель Управления (150/100)</title>
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.min.css" />
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f7f9; }
@@ -33,15 +34,28 @@
         .task-form button { width: 100%; } 
         .media-options { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; } 
         .checkbox { display: flex; align-items: center; gap: 6px; font-size: 0.95rem; color: #444; } 
-        .checkbox input { width: auto; accent-color: #1976d2; } 
-        .status-pill { font-weight: bold; padding: 2px 6px; border-radius: 4px; color: #333; } 
-        pre { background: #f0f3f5; padding: 10px; border-radius: 4px; white-space: pre-wrap; word-break: break-word; } 
-        .modal-backdrop { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10; } 
-        .modal-content { background: white; margin: 5% auto; padding: 20px; width: 80%; max-width: 720px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); } 
-        .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 10px; } 
-        @media (max-width: 900px) { 
-            .flex-container { flex-direction: column; } 
-        } 
+        .checkbox input { width: auto; accent-color: #1976d2; }
+        .format-section { margin-top: 12px; background: #f9fbfd; border: 1px solid #e0e7ef; padding: 12px; border-radius: 6px; }
+        .format-section h3 { margin-top: 0; font-size: 1rem; color: #2a4668; }
+        .format-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 12px; }
+        .format-field label { display: flex; flex-direction: column; gap: 4px; font-size: 0.9rem; color: #333; }
+        .format-field input { padding: 6px 8px; border-radius: 4px; border: 1px solid #ccd4dd; }
+        .format-notes { width: 100%; min-height: 70px; padding: 8px; border: 1px solid #ccd4dd; border-radius: 4px; resize: vertical; font-family: inherit; }
+        .status-pill { font-weight: bold; padding: 2px 6px; border-radius: 4px; color: #333; }
+        pre { background: #f0f3f5; padding: 10px; border-radius: 4px; white-space: pre-wrap; word-break: break-word; }
+        .modal-backdrop { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10; }
+        .modal-content { background: white; margin: 5% auto; padding: 20px; width: 80%; max-width: 720px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 10px; }
+        .schedule-header { display: flex; justify-content: space-between; align-items: center; margin-top: 40px; }
+        .schedule-table-wrapper { overflow-x: auto; margin-top: 10px; }
+        .schedule-table th, .schedule-table td { vertical-align: top; }
+        .schedule-table input { width: 100%; box-sizing: border-box; padding: 6px; border-radius: 4px; border: 1px solid #ccd4dd; }
+        .schedule-table input[type="number"] { min-width: 80px; }
+        .chart-wrapper { margin-top: 20px; height: 240px; }
+        .chart-wrapper canvas { width: 100% !important; height: 100% !important; }
+        @media (max-width: 900px) {
+            .flex-container { flex-direction: column; }
+        }
     </style>
 </head>
 <body>
@@ -68,6 +82,32 @@
                     <span>Планировать видео (Storyboard)</span>
                 </label>
             </div>
+            <div class="format-section">
+                <h3>Структура контента</h3>
+                <div class="format-grid">
+                    <div class="format-field">
+                        <label>Длина (слов)
+                            <input type="text" id="formatLength" placeholder="300 слов">
+                        </label>
+                    </div>
+                    <div class="format-field">
+                        <label>Целевая аудитория
+                            <input type="text" id="formatAudience" placeholder="Миллениалы">
+                        </label>
+                    </div>
+                    <div class="format-field">
+                        <label>Канал фокуса
+                            <input type="text" id="formatChannel" placeholder="Instagram, YouTube...">
+                        </label>
+                    </div>
+                    <div class="format-field">
+                        <label>CTA / Цель
+                            <input type="text" id="formatCTA" placeholder="Записаться на демо">
+                        </label>
+                    </div>
+                </div>
+                <textarea id="formatNotes" class="format-notes" placeholder="Дополнительные требования: стиль, хэштеги, частота, ограничения..."></textarea>
+            </div>
             <button id="startTaskBtn">Запустить AgentFlow</button>
         </div>
 
@@ -82,6 +122,8 @@
                 <div id="nodeDetailsContainer" style="margin-top: 20px;">
                     <p>Нажмите на узел DAG для просмотра деталей, результатов и промптов.</p>
                 </div>
+
+                <div id="scheduleContainer" style="margin-top: 30px;"></div>
             </div>
         </div>
 
@@ -98,10 +140,12 @@
         </div>
     </div>
 
+    
     <script>
         const tasksContainer = document.getElementById('tasksContainer');
         const taskTitle = document.getElementById('taskTitle');
         const nodeDetailsContainer = document.getElementById('nodeDetailsContainer');
+        const scheduleContainer = document.getElementById('scheduleContainer');
         const promptModal = document.getElementById('promptModal');
         const editNodeId = document.getElementById('editNodeId');
         const failReason = document.getElementById('failReason');
@@ -111,11 +155,20 @@
         const startTaskBtn = document.getElementById('startTaskBtn');
         const taskGenerateImage = document.getElementById('taskGenerateImage');
         const taskGenerateVideo = document.getElementById('taskGenerateVideo');
+        const formatLength = document.getElementById('formatLength');
+        const formatAudience = document.getElementById('formatAudience');
+        const formatChannel = document.getElementById('formatChannel');
+        const formatCTA = document.getElementById('formatCTA');
+        const formatNotes = document.getElementById('formatNotes');
 
         let activeTaskId = null;
         let network = null;
         let visData = { nodes: new vis.DataSet(), edges: new vis.DataSet() };
         let pendingRestartNode = null;
+        let currentSchedule = [];
+        let scheduleEditMode = false;
+        let scheduleChart = null;
+
         const socket = io();
 
         function getColorByStatus(status) {
@@ -124,7 +177,7 @@
                 case 'failed': return { background: '#F5C9C9', border: '#dc3545' };
                 case 'running': return { background: '#FFF3E0', border: '#FFA500' };
                 case 'planned': return { background: '#E0F7FA', border: '#17a2b8' };
-                case 'manually_overridden': 
+                case 'manually_overridden':
                 case 'skipped_retry': return { background: '#e6e6e6', border: '#6c757d' };
                 default: return { background: '#dfe9f3', border: '#90a4ae' };
             }
@@ -142,23 +195,23 @@
             nodesData.forEach(node => {
                 const status = (node.status || '').toLowerCase();
                 const labelAgent = node.agent || node.agent_type || 'Unknown';
-                
-                // Игнорируем SKIPPED_RETRY узлы для чистоты DAG, но сохраняем их в данных
+
                 if (status === 'skipped_retry') return;
 
                 visNodes.push({
                     id: node.id,
-                    label: `${labelAgent.replace('Agent', '')}\n(${node.id})\n${node.status}`,
+                    label: `${labelAgent.replace('Agent', '')}
+(${node.id})
+${node.status}`,
                     color: getColorByStatus(status),
                     shape: 'box',
                     nodeData: node
                 });
-                
+
                 if (Array.isArray(node.dependsOn)) {
                     node.dependsOn.forEach(depId => {
                         const depNode = nodesData.find(n => n.id === depId);
-                        // Пропускаем создание ребра, если зависимый узел был SKIPPED_RETRY
-                        if (depNode?.status.toLowerCase() === 'skipped_retry') return;
+                        if (depNode?.status?.toLowerCase() === 'skipped_retry') return;
                         visEdges.push({ from: depId, to: node.id, arrows: 'to' });
                     });
                 }
@@ -173,12 +226,28 @@
                     const nodeId = params.nodes[0];
                     if (nodeId) {
                         const nodeEntry = visData.nodes.get(nodeId);
-                        showNodeDetails(nodeEntry.nodeData);
+                        showNodeDetails(nodeEntry?.nodeData);
                     }
                 });
             } else {
                 network.setData(visData);
             }
+        }
+
+        function buildContentFormatPayload() {
+            const entries = [
+                { label: 'Длина', value: formatLength.value.trim() },
+                { label: 'Целевая аудитория', value: formatAudience.value.trim() },
+                { label: 'Канал фокуса', value: formatChannel.value.trim() },
+                { label: 'CTA', value: formatCTA.value.trim() },
+            ].filter(entry => entry.value);
+
+            const notes = formatNotes.value.trim();
+            if (notes) {
+                entries.push({ label: 'Дополнительно', value: notes });
+            }
+
+            return entries.map(entry => ({ label: entry.label, value: entry.value }));
         }
 
         async function startTask() {
@@ -189,11 +258,12 @@
                 const taskTone = document.getElementById('taskTone').value;
                 const includeImage = taskGenerateImage.checked;
                 const includeVideo = taskGenerateVideo.checked;
+                const contentFormat = buildContentFormatPayload();
 
                 const response = await fetch('/api/tasks/start', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ taskName, taskTopic, taskTone, includeImage, includeVideo })
+                    body: JSON.stringify({ taskName, taskTopic, taskTone, includeImage, includeVideo, contentFormat })
                 });
                 const payload = await response.json();
 
@@ -225,7 +295,7 @@
             tasks.forEach(task => {
                 const li = document.createElement('li');
                 li.className = 'task-item' + (task.id === activeTaskId ? ' active' : '');
-                const statusClass = `status-${(task.status || '').toLowerCase()}`; 
+                const statusClass = `status-${(task.status || '').toLowerCase()}`;
                 li.innerHTML = `
                     <span class="status-pill ${statusClass}">${task.status}</span>
                     <a href="#" data-task-id="${task.id}" title="${task.name}">${task.name.substring(0, 30)}...</a>
@@ -242,18 +312,212 @@
             try {
                 const response = await fetch(`/api/tasks/${taskId}`);
                 if (!response.ok) throw new Error('Задача не найдена');
-                const { task, nodes } = await response.json();
+                const { task, nodes, schedule } = await response.json();
                 activeTaskId = taskId;
                 taskTitle.textContent = task?.name ? `— ${task.name}` : '';
                 drawNetwork(nodes, taskId);
-                if (nodes.length) showNodeDetails(nodes.find(n => n.id === network?.getSelectedNodes?.()[0]) || nodes.find(n => n.status === 'FAILED') || nodes[nodes.length - 1]);
-                else nodeDetailsContainer.innerHTML = '<p>Нет узлов для отображения.</p>';
-                
+                scheduleEditMode = false;
+                renderSchedule(schedule, taskId);
+
+                if (nodes.length) {
+                    const selected = network?.getSelectedNodes?.()[0];
+                    const defaultNode = nodes.find(n => n.id === selected) || nodes.find(n => n.status === 'FAILED') || nodes[nodes.length - 1];
+                    showNodeDetails(defaultNode);
+                } else {
+                    nodeDetailsContainer.innerHTML = '<p>Нет узлов для отображения.</p>';
+                }
+
                 Array.from(tasksContainer.querySelectorAll('li.task-item')).forEach(li => {
                     li.classList.toggle('active', li.querySelector('a')?.dataset.taskId === activeTaskId);
                 });
             } catch (error) {
                 alert(error.message || 'Ошибка при загрузке задачи.');
+            }
+        }
+
+        function renderSchedule(schedule, taskId) {
+            if (!scheduleContainer) return;
+            currentSchedule = Array.isArray(schedule) ? schedule : [];
+
+            if (!currentSchedule.length) {
+                scheduleContainer.innerHTML = '<h3>График Публикаций</h3><p>График еще не разработан (зависит от StrategyAgent).</p>';
+                if (scheduleChart) {
+                    scheduleChart.destroy();
+                    scheduleChart = null;
+                }
+                return;
+            }
+
+            let html = `
+                <div class="schedule-header">
+                    <h3>График Публикаций и Статистика</h3>
+                    <button id="toggleScheduleEditBtn" class="secondary">${scheduleEditMode ? 'Завершить редактирование' : 'Edit Plan'}</button>
+                </div>
+                <div class="schedule-table-wrapper">
+                    <table class="schedule-table">
+                        <tr>
+                            <th>#</th>
+                            <th>Дата</th>
+                            <th>Тип</th>
+                            <th>Канал</th>
+                            <th>Тема</th>
+                            <th>Цель</th>
+                            <th>Заметки</th>
+                            <th>Просмотры</th>
+                            <th>Лайки</th>
+                        </tr>
+            `;
+
+            currentSchedule.forEach((item, index) => {
+                const dateCell = scheduleEditMode
+                    ? `<input type="date" value="${item.date || ''}" data-index="${index}" data-field="date" onchange="updateScheduleField(this, '${taskId}')">`
+                    : (item.date || '—');
+                const typeCell = scheduleEditMode
+                    ? `<input type="text" value="${item.type || ''}" data-index="${index}" data-field="type" onchange="updateScheduleField(this, '${taskId}')">`
+                    : (item.type || '—');
+                const channelCell = scheduleEditMode
+                    ? `<input type="text" value="${item.channel || ''}" data-index="${index}" data-field="channel" onchange="updateScheduleField(this, '${taskId}')">`
+                    : (item.channel || '—');
+                const topicCell = scheduleEditMode
+                    ? `<input type="text" value="${item.topic || ''}" data-index="${index}" data-field="topic" onchange="updateScheduleField(this, '${taskId}')">`
+                    : (item.topic || '—');
+                const objectiveCell = scheduleEditMode
+                    ? `<input type="text" value="${item.objective || ''}" data-index="${index}" data-field="objective" onchange="updateScheduleField(this, '${taskId}')">`
+                    : (item.objective || '—');
+                const notesCell = scheduleEditMode
+                    ? `<input type="text" value="${item.notes || ''}" data-index="${index}" data-field="notes" onchange="updateScheduleField(this, '${taskId}')">`
+                    : (item.notes || '—');
+                const viewsInput = `<input type="number" min="0" value="${item.views ?? 0}" data-index="${index}" data-field="views" onchange="updateScheduleField(this, '${taskId}')">`;
+                const likesInput = `<input type="number" min="0" value="${item.likes ?? 0}" data-index="${index}" data-field="likes" onchange="updateScheduleField(this, '${taskId}')">`;
+
+                html += `
+                        <tr>
+                            <td>${index + 1}</td>
+                            <td>${dateCell}</td>
+                            <td>${typeCell}</td>
+                            <td>${channelCell}</td>
+                            <td>${topicCell}</td>
+                            <td>${objectiveCell}</td>
+                            <td>${notesCell}</td>
+                            <td>${viewsInput}</td>
+                            <td>${likesInput}</td>
+                        </tr>
+                `;
+            });
+
+            html += `
+                    </table>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="scheduleChart"></canvas>
+                </div>
+            `;
+
+            scheduleContainer.innerHTML = html;
+
+            const toggleBtn = document.getElementById('toggleScheduleEditBtn');
+            if (toggleBtn) {
+                toggleBtn.addEventListener('click', () => {
+                    scheduleEditMode = !scheduleEditMode;
+                    renderSchedule(currentSchedule, taskId);
+                });
+            }
+
+            updateScheduleChart(currentSchedule);
+        }
+
+        function updateScheduleChart(schedule = []) {
+            const canvas = document.getElementById('scheduleChart');
+            if (!canvas) {
+                if (scheduleChart) {
+                    scheduleChart.destroy();
+                    scheduleChart = null;
+                }
+                return;
+            }
+
+            const labels = schedule.map((item, index) => item.date || `День ${index + 1}`);
+            const views = schedule.map(item => Number(item.views) || 0);
+            const likes = schedule.map(item => Number(item.likes) || 0);
+
+            if (scheduleChart && scheduleChart.canvas !== canvas) {
+                scheduleChart.destroy();
+                scheduleChart = null;
+            }
+
+            if (scheduleChart) {
+                scheduleChart.data.labels = labels;
+                scheduleChart.data.datasets[0].data = views;
+                scheduleChart.data.datasets[1].data = likes;
+                scheduleChart.update();
+                return;
+            }
+
+            scheduleChart = new Chart(canvas.getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: 'Просмотры',
+                            data: views,
+                            borderColor: '#1976d2',
+                            backgroundColor: 'rgba(25, 118, 210, 0.15)',
+                            fill: true,
+                            tension: 0.35,
+                            pointRadius: 3
+                        },
+                        {
+                            label: 'Лайки',
+                            data: likes,
+                            borderColor: '#ff7043',
+                            backgroundColor: 'rgba(255, 112, 67, 0.18)',
+                            fill: true,
+                            tension: 0.35,
+                            pointRadius: 3
+                        }
+                    ],
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true, ticks: { precision: 0 } }
+                    },
+                    plugins: {
+                        legend: { position: 'bottom' }
+                    }
+                }
+            });
+        }
+
+        async function updateScheduleField(inputElement, taskId) {
+            const index = Number.parseInt(inputElement.dataset.index, 10);
+            const field = inputElement.dataset.field;
+            if (!Number.isInteger(index) || !field) {
+                return;
+            }
+
+            const payload = { index };
+            payload[field] = inputElement.value;
+
+            try {
+                const response = await fetch(`/api/tasks/${taskId}/schedule/update`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.message || 'Не удалось обновить расписание.');
+                }
+
+                if (data.scheduleItem) {
+                    currentSchedule[index] = data.scheduleItem;
+                    updateScheduleChart(currentSchedule);
+                }
+            } catch (error) {
+                alert(error.message || 'Ошибка при обновлении расписания.');
             }
         }
 
@@ -264,6 +528,9 @@
             }
             if (node.agent_type === 'ImageAgent') {
                  return originalInput.promptOverride || originalInput.description || 'Key visual for the campaign';
+            }
+            if (node.agent_type === 'StrategyAgent') {
+                 return JSON.stringify({ topic: originalInput.topic, format: originalInput.format }, null, 2);
             }
             return JSON.stringify(originalInput, null, 2);
         }
@@ -298,6 +565,10 @@
                 html += `<h4>Итоговый Сгенерированный План/Промпт</h4><pre>${generatedContent}</pre>`;
             }
 
+            if (node.agent_type === 'StrategyAgent' && Array.isArray(node.result_data?.schedule)) {
+                html += `<h4>План публикаций (JSON)</h4><pre>${JSON.stringify(node.result_data.schedule, null, 2)}</pre>`;
+            }
+
             if (node.result_data) {
                 html += `<h4>Полный Результат</h4><pre>${JSON.stringify(node.result_data, null, 2)}</pre>`;
             }
@@ -306,7 +577,7 @@
                 html += `<p><strong class="status-failed">Узел завершился с ошибкой. Причина:</strong> ${node.result_data?.reason || 'Проверьте лог.'}</p>`;
                 html += `<a href="/api/logs/${node.taskId}" target="_blank"><button class="secondary">Посмотреть Лог Задачи</button></a>`;
                 if (node.agent_type?.includes('GuardAgent')) {
-                    html += `<button style="margin-left: 10px;" onclick="openPromptModal('${node.id}')">Редактировать Промпт и Перезапустить</button>`;
+                    html += `<button style="margin-left: 10px;" onclick="openPromptModal('${node.id}')">Редактировать Промпт</button>`;
                 }
             }
 
@@ -331,7 +602,7 @@
         async function submitManualRestart() {
             if (!pendingRestartNode || !activeTaskId) return;
             submitPromptBtn.disabled = true;
-            
+
             try {
                 const newPrompt = newPromptArea.value;
                 const response = await fetch(`/api/tasks/${activeTaskId}/restart/${pendingRestartNode}`, {
@@ -342,7 +613,7 @@
                 const payload = await response.json();
 
                 if (!response.ok) throw new Error(payload.message || 'Не удалось перезапустить узел.');
-                
+
                 alert(`Перезапуск: ${payload.message}`);
                 closePromptModal();
             } catch (error) {
@@ -358,7 +629,8 @@
             if (!update || !update.taskId) return;
             if (update.taskId === activeTaskId) {
                 drawNetwork(update.nodes || [], update.taskId);
-                // Обновляем детали выбранного узла, если он FAILED или выбран
+                scheduleEditMode = false;
+                renderSchedule(update.schedule || [], update.taskId);
                 const selectedNodeId = network?.getSelectedNodes?.()[0];
                 if (selectedNodeId) {
                     const nodeEntry = visData.nodes.get(selectedNodeId);
@@ -374,6 +646,9 @@
         startTaskBtn.addEventListener('click', startTask);
 
         window.onload = () => { fetchTasks(); };
+
+        window.updateScheduleField = updateScheduleField;
     </script>
+
 </body>
 </html>

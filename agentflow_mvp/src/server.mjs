@@ -84,10 +84,13 @@ const broadcastTaskUpdate = taskId => {
     .filter(Boolean)
     .map(node => ({ ...node, agent: node.agent_type }));
 
+  const schedule = TaskStore.getTaskSchedule(taskId);
+
   io.emit('task-update', {
     taskId,
     status: taskData.status,
     nodes,
+    schedule,
   });
 };
 
@@ -100,7 +103,14 @@ io.on('connection', socket => {
 
 app.post('/api/tasks/start', async (req, res) => {
   try {
-    const { taskName, taskTopic, taskTone, includeImage, includeVideo } = req.body || {};
+    const {
+      taskName,
+      taskTopic,
+      taskTone,
+      includeImage,
+      includeVideo,
+      contentFormat,
+    } = req.body || {};
     const plan = JSON.parse(dagTemplate);
 
     if (!plan?.nodes?.length) {
@@ -108,14 +118,59 @@ app.post('/api/tasks/start', async (req, res) => {
     }
 
     plan.task_name = taskName || plan.task_name;
-    const writerNode = plan.nodes.find(node => node.agent === 'WriterAgent' || node.agent_type === 'WriterAgent');
-    if (writerNode) {
-      writerNode.input = {
-        ...writerNode.input,
-        topic: taskTopic ?? writerNode.input?.topic,
-        tone: taskTone ?? writerNode.input?.tone,
-      };
-    }
+
+    const normalizeFormat = raw => {
+      if (!Array.isArray(raw)) {
+        return [];
+      }
+
+      return raw
+        .map(entry => {
+          if (!entry) return null;
+          if (typeof entry === 'string') {
+            const trimmed = entry.trim();
+            return trimmed ? { label: 'note', value: trimmed } : null;
+          }
+          if (typeof entry === 'object') {
+            const label = entry.label || entry.name || entry.field || entry.title || entry.key || '';
+            const value = entry.value ?? entry.detail ?? entry.description ?? entry.text ?? '';
+            if (!label && !value) {
+              return null;
+            }
+            return { label, value };
+          }
+          return { label: 'note', value: String(entry) };
+        })
+        .filter(Boolean);
+    };
+
+    const normalizedFormat = normalizeFormat(contentFormat);
+
+    const getFormatClone = () => normalizedFormat.map(entry => ({ ...entry }));
+
+    plan.nodes.forEach(node => {
+      const agentType = node.agent || node.agent_type;
+      const isWriter = agentType === 'WriterAgent';
+      const isProductAnalysis = agentType === 'ProductAnalysisAgent';
+      const isStrategy = agentType === 'StrategyAgent';
+
+      if (isWriter) {
+        node.input = {
+          ...node.input,
+          topic: taskTopic ?? node.input?.topic,
+          tone: taskTone ?? node.input?.tone,
+          format: getFormatClone(),
+        };
+      }
+
+      if (isProductAnalysis || isStrategy) {
+        node.input = {
+          ...node.input,
+          topic: taskTopic ?? node.input?.topic,
+          format: getFormatClone(),
+        };
+      }
+    });
 
     const includeImageFlag = includeImage === undefined ? true : includeImage === true || includeImage === 'true';
     const includeVideoFlag = includeVideo === true || includeVideo === 'true';
@@ -168,7 +223,37 @@ app.get('/api/tasks/:taskId', (req, res) => {
   }
 
   const nodes = task.nodes.map(nodeId => TaskStore.getNode(nodeId)).filter(Boolean);
-  res.json({ task, nodes });
+  const schedule = TaskStore.getTaskSchedule(taskId);
+
+  res.json({ task, nodes, schedule });
+});
+
+app.get('/api/tasks/:taskId/schedule', (req, res) => {
+  const { taskId } = req.params;
+  const schedule = TaskStore.getTaskSchedule(taskId);
+  if (!schedule) {
+    return res.status(404).json({ success: false, message: 'Task or schedule not found.' });
+  }
+
+  res.json({ taskId, schedule });
+});
+
+app.post('/api/tasks/:taskId/schedule/update', (req, res) => {
+  const { taskId } = req.params;
+  const { index, ...updates } = req.body || {};
+
+  const parsedIndex = Number.parseInt(index, 10);
+  if (!Number.isInteger(parsedIndex) || parsedIndex < 0) {
+    return res.status(400).json({ success: false, message: 'Index is required and must be a valid integer.' });
+  }
+
+  const updatedItem = TaskStore.updateScheduleItem(taskId, parsedIndex, updates);
+  if (!updatedItem) {
+    return res.status(404).json({ success: false, message: 'Schedule item not found.' });
+  }
+
+  broadcastTaskUpdate(taskId);
+  res.json({ success: true, scheduleItem: updatedItem });
 });
 
 app.get('/api/logs/:taskId', (req, res) => {

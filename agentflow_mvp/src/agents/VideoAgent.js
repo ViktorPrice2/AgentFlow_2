@@ -31,13 +31,28 @@ export class VideoAgent {
     logger.logStep(nodeId, 'START', { message: 'Generating Video Storyboard and Prompt' });
 
     // Собираем зависимости
-    const dependencies = {};
-    for (const depId of node.dependsOn) {
-      dependencies[depId] = TaskStore.getResult(depId);
-    }
+    const dependencyEntries = node.dependsOn
+      .map(depId => {
+        const depNode = TaskStore.getNode(depId);
+        return {
+          id: depId,
+          agent: depNode?.agent_type,
+          result: TaskStore.getResult(depId),
+        };
+      })
+      .filter(Boolean);
 
-    const textResult = dependencies.node2?.approvedContent || dependencies.node1?.text || '';
-    const imagePrompt = dependencies.node3?.finalImagePrompt || 'Key image prompt not available.';
+    const findResult = predicate => {
+      const entry = dependencyEntries.find(item => predicate(item.agent));
+      return entry?.result || null;
+    };
+
+    const guardResult = findResult(agentType => agentType === 'GuardAgent');
+    const writerResult = findResult(agentType => agentType === 'WriterAgent');
+    const imageResult = findResult(agentType => agentType === 'ImageAgent');
+
+    const textResult = guardResult?.approvedContent || writerResult?.text || '';
+    const imagePrompt = imageResult?.finalImagePrompt || 'Key image prompt not available.';
 
     // ПРОМПТ ДЛЯ СОЗДАНИЯ СЦЕНАРИЯ И ПРОМПТА
     const promptToGemini = [

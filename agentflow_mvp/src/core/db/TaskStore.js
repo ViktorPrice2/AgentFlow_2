@@ -12,7 +12,7 @@ function clone(value) {
 export class TaskStore {
   static createTask(name, dagPlan) {
     const taskId = `task_${taskIdCounter++}`;
-    tasks.set(taskId, { name, dagPlan, status: 'CREATED', nodes: [] });
+    tasks.set(taskId, { name, dagPlan, status: 'CREATED', nodes: [], schedule: [] });
 
     let nodeIdCounter = 1;
     for (const nodeDef of dagPlan.nodes) {
@@ -32,6 +32,64 @@ export class TaskStore {
       nodeIdCounter++;
     }
     return taskId;
+  }
+
+  static updateTaskSchedule(taskId, scheduleData) {
+    const task = tasks.get(taskId);
+    if (!task) {
+      return null;
+    }
+
+    const normalizedSchedule = Array.isArray(scheduleData)
+      ? scheduleData.map(item => ({
+          date: item?.date || '',
+          type: item?.type || 'post',
+          channel: item?.channel || 'organic',
+          topic: item?.topic || item?.title || '',
+          objective: item?.objective || item?.goal || '',
+          notes: item?.notes || item?.cta || '',
+          views: Number.isFinite(item?.views) ? item.views : 0,
+          likes: Number.isFinite(item?.likes) ? item.likes : 0,
+          content_prompt: item?.content_prompt || null,
+          image_prompt: item?.image_prompt || null,
+          status: item?.status || 'PLANNED_CONTENT',
+        }))
+      : [];
+
+    task.schedule = normalizedSchedule;
+    return task.schedule;
+  }
+
+  static updateScheduleItem(taskId, index, updates = {}) {
+    const task = tasks.get(taskId);
+    if (!task || !Array.isArray(task.schedule) || index < 0 || index >= task.schedule.length) {
+      return null;
+    }
+
+    const target = task.schedule[index];
+    if (!target) {
+      return null;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updates, 'views')) {
+      const parsedViews = Number.parseInt(updates.views, 10);
+      target.views = Number.isFinite(parsedViews) ? parsedViews : target.views;
+      delete updates.views;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updates, 'likes')) {
+      const parsedLikes = Number.parseInt(updates.likes, 10);
+      target.likes = Number.isFinite(parsedLikes) ? parsedLikes : target.likes;
+      delete updates.likes;
+    }
+
+    Object.assign(target, updates);
+    return target;
+  }
+
+  static getTaskSchedule(taskId) {
+    const task = tasks.get(taskId);
+    return task?.schedule || [];
   }
 
   static getNode(nodeId) {
