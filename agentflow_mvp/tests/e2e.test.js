@@ -14,6 +14,15 @@ function createTestTask(dagPath) {
   return TaskStore.createTask(dagPlan.task_name, dagPlan);
 }
 
+function findLastMatching(ids, predicate) {
+  for (let index = ids.length - 1; index >= 0; index -= 1) {
+    if (predicate(ids[index])) {
+      return ids[index];
+    }
+  }
+  return undefined;
+}
+
 test.beforeEach(() => {
   TaskStore.reset();
   QueueService.clear();
@@ -34,7 +43,11 @@ test('E2E: Full DAG execution must complete successfully', async () => {
   const guard2Node = TaskStore.getNode('node4');
 
   assert.equal(writerNode.status, 'SUCCESS');
-  assert.ok(writerNode.result_data.text.includes('MOCK: gpt-4 generated content for: Write an enthusiastic article about SuperProduct.'));
+  assert.ok(
+    writerNode.result_data.text.includes(
+      'MOCK: gemini-2.5-flash generated content for: Write an enthusiastic article about SuperProduct.'
+    )
+  );
 
   assert.equal(guard1Node.status, 'SUCCESS');
   assert.equal(guard1Node.result_data.status, 'SUCCESS');
@@ -45,20 +58,46 @@ test('E2E: Full DAG execution must complete successfully', async () => {
   assert.equal(guard2Node.status, 'SUCCESS');
 });
 
-test('E2E: GuardAgent failure must block subsequent nodes', async () => {
+test('E2E: GuardAgent failure triggers RetryAgent and recovers', async () => {
+  process.env.FORCE_GUARD_FAIL = 'once';
+
+  const taskId = createTestTask('plans/dag.json');
+  await MasterAgent.runScheduler(taskId);
+
+  const task = TaskStore.getTask(taskId);
+  assert.equal(task.status, 'COMPLETED');
+
+  const guard1Node = TaskStore.getNode('node2');
+  assert.equal(guard1Node.status, 'SUCCESS');
+
+  const retryWriterId = findLastMatching(task.nodes, id => id.startsWith('node1_v'));
+  assert.ok(retryWriterId, 'Expected a corrective writer node to be created');
+  const retryWriterNode = TaskStore.getNode(retryWriterId);
+  assert.equal(retryWriterNode.status, 'SUCCESS');
+  assert.ok(retryWriterNode.input_data.promptOverride, 'Corrective writer should have prompt override');
+
+  assert.equal(guard1Node.dependsOn[0], retryWriterId);
+
+  const retryAgentId = findLastMatching(task.nodes, id => id.startsWith('retry_node2'));
+  assert.ok(retryAgentId, 'RetryAgent node should exist');
+  const retryAgentNode = TaskStore.getNode(retryAgentId);
+  assert.equal(retryAgentNode.status, 'SUCCESS');
+});
+
+test('E2E: Persistent GuardAgent failure marks task as failed', async () => {
   process.env.FORCE_GUARD_FAIL = 'true';
 
   const taskId = createTestTask('plans/dag.json');
   await MasterAgent.runScheduler(taskId);
 
   const task = TaskStore.getTask(taskId);
+  assert.equal(task.status, 'FAILED');
 
   const guard1Node = TaskStore.getNode('node2');
   assert.equal(guard1Node.status, 'FAILED');
-  assert.equal(guard1Node.result_data.reason, 'TONE_MISMATCH: Content was too formal.');
 
-  const imageNode = TaskStore.getNode('node3');
-  assert.equal(imageNode.status, 'PLANNED');
-
-  assert.equal(task.status, 'COMPLETED');
+  const retryAgentId = findLastMatching(task.nodes, id => id.startsWith('retry_node2'));
+  assert.ok(retryAgentId, 'RetryAgent should have been scheduled');
+  const retryAgentNode = TaskStore.getNode(retryAgentId);
+  assert.equal(retryAgentNode.status, 'FAILED');
 });

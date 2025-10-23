@@ -5,25 +5,28 @@ const AGENT_MAP = {
   WriterAgent: (await import('./WriterAgent.js')).WriterAgent,
   ImageAgent: (await import('./ImageAgent.js')).ImageAgent,
   GuardAgent: (await import('./GuardAgent.js')).GuardAgent,
+  RetryAgent: (await import('./RetryAgent.js')).RetryAgent,
 };
 
 async function processJob(job) {
   const { agentType, payload } = job;
   const { nodeId } = payload;
 
-  TaskStore.updateNodeStatus(nodeId, 'RUNNING');
+  const node = TaskStore.updateNodeStatus(nodeId, 'RUNNING');
 
   const AgentModule = AGENT_MAP[agentType];
   if (!AgentModule) {
     TaskStore.updateNodeStatus(nodeId, 'FAILED', { error: `Agent ${agentType} not found.` });
-    return;
+    return null;
   }
 
   try {
-    await AgentModule.execute(nodeId);
+    await AgentModule.execute(nodeId, payload);
   } catch (error) {
     console.error(`Worker error processing ${nodeId}:`, error.message);
   }
+
+  return TaskStore.getNode(nodeId);
 }
 
 export class MasterAgent {
@@ -49,7 +52,19 @@ export class MasterAgent {
 
       while (!QueueService.isQueueEmpty()) {
         const job = QueueService.getJob();
-        await processJob(job);
+        const processedNode = await processJob(job);
+
+        if (processedNode && processedNode.status === 'FAILED' && processedNode.agent_type === 'GuardAgent') {
+          const retryNode = TaskStore.createRetryAgentNode(taskId, processedNode.id);
+          if (retryNode) {
+            console.log(`[Scheduler] Guard FAIL on ${processedNode.id}. Launching ${retryNode.id}...`);
+            QueueService.addJob('RetryAgent', {
+              taskId,
+              nodeId: retryNode.id,
+              failedNodeId: processedNode.id,
+            });
+          }
+        }
       }
 
       const updatedTask = TaskStore.getTask(taskId);
@@ -61,12 +76,11 @@ export class MasterAgent {
       if (!completed && readyNodes.length === 0 && QueueService.isQueueEmpty()) {
         const allNodes = updatedTask.nodes.map(id => TaskStore.getNode(id));
         const plannedCount = allNodes.filter(n => n && n.status === 'PLANNED').length;
+        const failedCount = allNodes.filter(n => n && n.status === 'FAILED').length;
         if (plannedCount > 0) {
           console.warn('\n[Scheduler] Task Blocked. Planned nodes remain, but no ready nodes. Check FAILED statuses.');
         }
-        if (updatedTask.status !== 'FAILED') {
-          updatedTask.status = 'COMPLETED';
-        }
+        updatedTask.status = failedCount > 0 ? 'FAILED' : 'COMPLETED';
         completed = true;
       }
     }
