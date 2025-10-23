@@ -32,6 +32,9 @@
         textarea { font-family: monospace; }
         .task-form input, .task-form select { width: 100%; padding: 8px; margin-bottom: 10px; border-radius: 4px; border: 1px solid #ccc; }
         .task-form button { width: 100%; }
+        .media-options { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
+        .checkbox { display: flex; align-items: center; gap: 6px; font-size: 0.95rem; color: #444; }
+        .checkbox input { width: auto; accent-color: #1976d2; }
         .status-pill { font-weight: bold; padding: 2px 6px; border-radius: 4px; color: #333; }
         pre { background: #f0f3f5; padding: 10px; border-radius: 4px; white-space: pre-wrap; word-break: break-word; }
         .modal-backdrop { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10; }
@@ -55,6 +58,16 @@
                 <option value="enthusiastic">Энтузиастичный</option>
                 <option value="formal">Формальный</option>
             </select>
+            <div class="media-options">
+                <label class="checkbox">
+                    <input type="checkbox" id="taskGenerateImage" checked>
+                    <span>Сгенерировать изображение</span>
+                </label>
+                <label class="checkbox">
+                    <input type="checkbox" id="taskGenerateVideo">
+                    <span>Сгенерировать видео (beta)</span>
+                </label>
+            </div>
             <button id="startTaskBtn">Запустить AgentFlow</button>
         </div>
 
@@ -96,6 +109,8 @@
         const submitPromptBtn = document.getElementById('submitPromptBtn');
         const cancelPromptBtn = document.getElementById('cancelPromptBtn');
         const startTaskBtn = document.getElementById('startTaskBtn');
+        const taskGenerateImage = document.getElementById('taskGenerateImage');
+        const taskGenerateVideo = document.getElementById('taskGenerateVideo');
 
         let activeTaskId = null;
         let network = null;
@@ -164,11 +179,13 @@
                 const taskName = document.getElementById('taskName').value;
                 const taskTopic = document.getElementById('taskTopic').value;
                 const taskTone = document.getElementById('taskTone').value;
+                const includeImage = taskGenerateImage ? taskGenerateImage.checked : true;
+                const includeVideo = taskGenerateVideo ? taskGenerateVideo.checked : false;
 
                 const response = await fetch('/api/tasks/start', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ taskName, taskTopic, taskTone })
+                    body: JSON.stringify({ taskName, taskTopic, taskTone, includeImage, includeVideo })
                 });
                 const payload = await response.json();
 
