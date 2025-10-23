@@ -1,3 +1,6 @@
+// src/agents/GuardAgent.js
+// Файл input_file_1.js
+
 import { Logger } from '../core/Logger.js';
 import { TaskStore } from '../core/db/TaskStore.js';
 
@@ -6,6 +9,7 @@ let forcedFailureConsumed = false;
 function shouldFailGuard() {
   const flag = process.env.FORCE_GUARD_FAIL || 'false';
   if (flag !== 'once') {
+    // Сброс флага, если это не 'once', для многократных запусков
     forcedFailureConsumed = false;
   }
   if (flag === 'true') {
@@ -15,7 +19,8 @@ function shouldFailGuard() {
     forcedFailureConsumed = true;
     return true;
   }
-  return Math.random() < 0.2;
+  // 20% шанс сбоя в реальном режиме, если FORCE_GUARD_FAIL не установлен
+  return process.env.MOCK_MODE !== 'true' && Math.random() < 0.2; 
 }
 
 export class GuardAgent {

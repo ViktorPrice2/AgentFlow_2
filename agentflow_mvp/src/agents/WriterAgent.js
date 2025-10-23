@@ -1,3 +1,6 @@
+// src/agents/WriterAgent.js
+// Файл input_file_2.js
+
 import { ProviderManager } from '../core/ProviderManager.js';
 import { Logger } from '../core/Logger.js';
 import { TaskStore } from '../core/db/TaskStore.js';
@@ -14,6 +17,7 @@ export class WriterAgent {
     const logger = new Logger(node.taskId);
     logger.logStep(nodeId, 'START', { message: 'Generating text content' });
 
+    // Используем promptOverride, если он есть (это результат RetryAgent)
     const basePrompt = node.input_data?.promptOverride
       ? node.input_data.promptOverride
       : `Write an ${node.input_data.tone} article about ${node.input_data.topic}.`;
@@ -30,13 +34,17 @@ export class WriterAgent {
         },
       };
 
+      // Стоимость для Gemini Flash - ниже, чем GPT-4
+      const costPerToken = 0.0000005; 
+      const cost = tokens * costPerToken;
+
       logger.logStep(nodeId, 'END', {
         status: 'SUCCESS',
         tokens,
-        cost: tokens * 0.000015,
+        cost,
       });
 
-      TaskStore.updateNodeStatus(nodeId, 'SUCCESS', resultData, tokens * 0.000015);
+      TaskStore.updateNodeStatus(nodeId, 'SUCCESS', resultData, cost);
       return resultData;
     } catch (error) {
       logger.logStep(nodeId, 'ERROR', { message: error.message });

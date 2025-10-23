@@ -1,4 +1,5 @@
 // src/agents/MasterAgent.js
+// Файл input_file_0.js
 
 import { TaskStore } from '../core/db/TaskStore.js';
 import { QueueService } from '../core/queue/QueueService.js';
@@ -8,7 +9,7 @@ const AGENT_MAP = {
   WriterAgent: (await import('./WriterAgent.js')).WriterAgent,
   ImageAgent: (await import('./ImageAgent.js')).ImageAgent,
   GuardAgent: (await import('./GuardAgent.js')).GuardAgent,
-  RetryAgent: (await import('./RetryAgent.js')).RetryAgent, // Убедитесь, что RetryAgent.js создан!
+  RetryAgent: (await import('./RetryAgent.js')).RetryAgent, 
 };
 
 async function processJob(job, onUpdate) {
@@ -48,6 +49,7 @@ async function processJob(job, onUpdate) {
 }
 
 export class MasterAgent {
+  // onUpdate - функция для WebSockets
   static async runScheduler(taskId, onUpdate) {
     const task = TaskStore.getTask(taskId);
     if (!task) {
@@ -69,6 +71,7 @@ export class MasterAgent {
       // 1. Диспетчеризация: Добавление готовых узлов в очередь
       for (const node of readyNodes) {
         console.log(`[Scheduler] Dispatching ${node.agent_type} for ${node.id}`);
+        // В payload передается вся информация
         QueueService.addJob(node.agent_type, { taskId, nodeId: node.id, input_data: node.input_data });
       }
 
@@ -79,11 +82,11 @@ export class MasterAgent {
 
         // 3. Логика Сбоя GuardAgent и Запуск RetryAgent
         if (processedNode && processedNode.status === 'FAILED' && processedNode.agent_type === 'GuardAgent') {
-          // Создание нового узла RetryAgent
           const retryNode = TaskStore.createRetryAgentNode(taskId, processedNode.id);
           
           if (retryNode) {
             console.log(`[Scheduler] Guard FAIL on ${processedNode.id}. Launching ${retryNode.id}...`);
+            // Добавляем RetryAgent в очередь для немедленного выполнения
             QueueService.addJob('RetryAgent', {
               taskId,
               nodeId: retryNode.id,
@@ -93,10 +96,11 @@ export class MasterAgent {
               onUpdate(taskId);
             }
           }
+          // Если retryNode === null, значит, достигнут максимум попыток, и TaskStore пометит задачу как FAILED
         }
       }
-
-      // 4. Проверка завершения
+      
+      // 4. Проверка завершения и выход
       const updatedTask = TaskStore.getTask(taskId);
       if (updatedTask.status === 'COMPLETED' || updatedTask.status === 'FAILED') {
         completed = true;
@@ -106,14 +110,15 @@ export class MasterAgent {
         break;
       }
 
+      // 5. Защита от зависаний: если нет готовых узлов и очередь пуста, но есть PLANNED
       if (!completed && readyNodes.length === 0 && QueueService.isQueueEmpty()) {
         const allNodes = updatedTask.nodes.map(id => TaskStore.getNode(id));
         const plannedCount = allNodes.filter(n => n && n.status === 'PLANNED').length;
-        const failedCount = allNodes.filter(n => n && n.status === 'FAILED').length;
+        
         if (plannedCount > 0) {
-          console.warn('\n[Scheduler] Task Blocked. Planned nodes remain, but no ready nodes. Check FAILED statuses.');
-        }
-        updatedTask.status = failedCount > 0 ? 'FAILED' : 'COMPLETED';
+          console.warn('\n[Scheduler] Task Blocked. Transitioning to FAILED.');
+          updatedTask.status = 'FAILED'; 
+        } 
         if (typeof onUpdate === 'function') {
           onUpdate(taskId);
         }

@@ -1,53 +1,93 @@
 // src/agents/RetryAgent.js
+// Файл input_file_4.js
 
 import { ProviderManager } from '../core/ProviderManager.js';
 import { Logger } from '../core/Logger.js';
 import { TaskStore } from '../core/db/TaskStore.js';
 
-const CORRECTIVE_MODEL = 'gemini-2.5-flash';
+function clone(value) {
+  return value ? JSON.parse(JSON.stringify(value)) : {};
+}
 
 export class RetryAgent {
-  static async execute(nodeId) {
+  static async execute(nodeId, payload = {}) {
     const node = TaskStore.getNode(nodeId);
-    const logger = new Logger(node.taskId);
-    
-    // failedNodeId хранится в input_data (см. обновление MasterAgent ниже)
-    const failedNodeId = node.input_data.failedNodeId; 
-    const failedNode = TaskStore.getNode(failedNodeId);
-    const reason = failedNode?.result_data?.reason || 'Unknown validation failure.';
-    
-    const originalAgentType = failedNode?.agent_type.replace('GuardAgent', 'WriterAgent'); // Определяем, какой агент нужно перезапустить
-    
-    logger.logStep(nodeId, 'START', { message: `Generating corrective prompt for ${failedNodeId}` });
+    if (!node) {
+      throw new Error(`RetryAgent attempted to execute unknown node: ${nodeId}`);
+    }
 
-    // 1. Создание промпта для коррекции
-    const correctionPrompt = `A previous content generation step failed with the reason: "${reason}". The original instruction was to generate an ${failedNode.input_data.topic} article with an ${failedNode.input_data.tone} tone. You MUST generate a NEW, IMPROVED prompt to ensure the next attempt avoids this mistake. The new prompt must be focused on addressing the specific failure reason. Output only the NEW prompt text.`;
-    
-    let newPromptText;
-    try {
-        const { result: correctiveText, tokens } = await ProviderManager.invoke(CORRECTIVE_MODEL, correctionPrompt, 'text');
-        newPromptText = correctiveText.trim();
-        logger.logStep(nodeId, 'INFO', { message: 'New prompt generated.', tokens });
-    } catch (error) {
-        logger.logStep(nodeId, 'ERROR', { message: 'Failed to generate corrective prompt: ' + error.message });
-        TaskStore.updateNodeStatus(nodeId, 'FAILED');
+    const logger = new Logger(node.taskId);
+    const failedGuardNodeId = payload.failedNodeId || node.input_data?.failedNodeId;
+
+    if (!failedGuardNodeId) {
+      logger.logStep(nodeId, 'ERROR', { message: 'RetryAgent missing failedNodeId context.' });
+      TaskStore.updateNodeStatus(nodeId, 'FAILED', { error: 'failedNodeId not provided.' });
+      return;
+    }
+
+    const failedGuardNode = TaskStore.getNode(failedGuardNodeId);
+    if (!failedGuardNode) {
+        logger.logStep(nodeId, 'ERROR', { message: `Failed Guard node ${failedGuardNodeId} not found.` });
+        TaskStore.updateNodeStatus(nodeId, 'FAILED', { error: `Failed Guard node ${failedGuardNodeId} not found.` });
         return;
     }
 
-    // 2. Создание нового узла в БД для перезапуска
-    const nextAttempt = failedNode.attempt ? failedNode.attempt + 1 : 2;
-    const newAgentId = `${failedNodeId.replace('_guard', '')}_v${nextAttempt}`;
-
-    // Перезапись входных данных для нового узла
-    const newAgentInput = {
-        ...failedNode.input_data, 
-        topic: newPromptText, // Используем сгенерированный промпт как новый 'topic'
-        // В реальной системе нужно обновить 'input_data' WriterAgent
-    };
-
-    TaskStore.createCorrectiveNode(newAgentId, originalAgentType, newAgentInput, failedNode.dependsOn);
+    const dependencyId = failedGuardNode.dependsOn?.[0]; // Оригинальный генеративный узел (e.g., node1)
+    const dependencyNode = TaskStore.getNode(dependencyId);
     
-    logger.logStep(nodeId, 'END', { status: 'SUCCESS', correctiveNodeId: newAgentId });
-    TaskStore.updateNodeStatus(nodeId, 'SUCCESS', { correctiveNodeId: newAgentId, retryTarget: failedNodeId });
+    if (!dependencyNode) {
+      logger.logStep(nodeId, 'ERROR', { message: `Dependency node ${dependencyId} not found.` });
+      TaskStore.updateNodeStatus(nodeId, 'FAILED', { error: `Dependency node ${dependencyId} not found.` });
+      return;
+    }
+
+    const reason = failedGuardNode.result_data?.reason || 'Unknown failure reason';
+    const originalInput = clone(dependencyNode.input_data); // Входные данные для WriterAgent/ImageAgent
+
+    logger.logStep(nodeId, 'START', {
+      message: `Generating corrective prompt for ${dependencyId}`,
+      reason,
+    });
+
+    const correctionPrompt = `The previous attempt to generate content failed because: ${reason}. Original request: ${JSON.stringify(
+      originalInput
+    )}. Provide a revised prompt that keeps the request intent but fixes the issue. Output only the revised prompt text.`;
+
+    try {
+      const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+      const { result: newPromptText } = await ProviderManager.invoke(model, correctionPrompt, 'text');
+
+      // 1. Создание обновленных входных данных
+      const updatedInput = clone(originalInput);
+      // Мы помещаем новый промпт в 'promptOverride', который WriterAgent использует
+      updatedInput.promptOverride = newPromptText.trim(); 
+      updatedInput.retryCount = (originalInput.retryCount || 0) + 1;
+
+      // 2. Создание нового генеративного узла (e.g., node1_v2)
+      const correctiveNode = TaskStore.createCorrectiveNode(dependencyId, updatedInput);
+      
+      if (!correctiveNode) {
+          throw new Error('Max retry limit reached or failed to create corrective node.');
+      }
+      
+      // 3. Отмечаем старый узел и GuardAgent как SKIPPED/OVERRIDDEN
+      TaskStore.prepareNodeForRetry(failedGuardNodeId, correctiveNode.id);
+
+
+      TaskStore.updateNodeStatus(nodeId, 'SUCCESS', {
+        correctiveNodeId: correctiveNode.id,
+        retryTarget: dependencyId,
+      });
+      logger.logStep(nodeId, 'END', {
+        status: 'SUCCESS',
+        correctiveNode: correctiveNode.id,
+      });
+      return { correctiveNodeId: correctiveNode.id };
+
+    } catch (error) {
+      logger.logStep(nodeId, 'ERROR', { message: error.message });
+      TaskStore.updateNodeStatus(nodeId, 'FAILED', { error: error.message });
+      throw error;
+    }
   }
 }
