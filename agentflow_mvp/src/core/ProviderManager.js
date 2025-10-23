@@ -33,7 +33,7 @@ export class ProviderManager {
 
       const axiosConfig = {
         headers: { 'Content-Type': 'application/json' },
-        timeout: 60000, // Таймаут для предотвращения socket hang up
+        timeout: 120000, // Таймаут для предотвращения socket hang up
       };
 
       const payload = {
