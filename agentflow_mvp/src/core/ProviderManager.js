@@ -13,14 +13,33 @@ const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1';
 // А ДЛЯ ИЗОБРАЖЕНИЙ ПОКА ДОСТУПЕН ТОЛЬКО v1beta ЭНДПОИНТ
 const GEMINI_IMAGE_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
 
-const shouldFallbackToImagenGenerate = error => {
+const shouldAttemptImageFallback = error => {
   if (!error || !error.response) return false;
+
   const status = error.response.status;
   const message = String(error.response.data?.error?.message || '').toLowerCase();
-  if (status === 404 || status === 405 || status === 501) {
+
+  if ([404, 405, 501].includes(status)) {
     return true;
   }
-  return message.includes('not found') && message.includes('generatecontent');
+
+  if (status === 400) {
+    if (
+      message.includes('text_prompts') ||
+      message.includes('unknown name') ||
+      message.includes('unsupported field') ||
+      message.includes('invalid argument')
+    ) {
+      return true;
+    }
+  }
+
+  return (
+    message.includes('not found') ||
+    message.includes('generatecontent') ||
+    message.includes('unsupported for this method') ||
+    message.includes('method not found')
+  );
 };
 
 const logAxiosError = (error, contextLabel) => {
@@ -55,6 +74,7 @@ const collectLegacyImageCandidates = baseModel => {
   }
   candidates.add('imagen-3.0');
   candidates.add('imagen-3.0-latest');
+  candidates.add('imagegeneration');
   return Array.from(candidates);
 };
 
@@ -64,29 +84,62 @@ const extractBase64Image = data => {
   if (Array.isArray(data.images)) collections.push(data.images);
   if (Array.isArray(data.result?.images)) collections.push(data.result.images);
   if (Array.isArray(data.predictions)) collections.push(data.predictions);
+  if (Array.isArray(data.generatedImages)) collections.push(data.generatedImages);
+  if (Array.isArray(data.generated_images)) collections.push(data.generated_images);
+  if (Array.isArray(data.outputs)) collections.push(data.outputs);
+  if (Array.isArray(data.output?.images)) collections.push(data.output.images);
 
   for (const list of collections) {
     for (const item of list) {
       if (!item) continue;
-      const base64 =
-        item.inlineData?.data ||
-        item.image?.base64Data ||
-        item.image?.imageBytes ||
-        item.base64Data ||
-        item.bytesBase64 ||
-        item.imageBytes ||
-        item.b64_json ||
-        item.b64Json ||
-        item.data ||
-        item.image?.data;
-      if (base64) {
-        const mimeType =
-          item.mimeType ||
-          item.mime_type ||
-          item.image?.mimeType ||
-          item.image?.mime_type ||
-          'image/png';
-        return { base64, mimeType };
+
+      let mimeType =
+        item.mimeType ||
+        item.mime_type ||
+        item.image?.mimeType ||
+        item.image?.mime_type ||
+        item.media?.mimeType ||
+        item.media?.mime_type ||
+        item.output?.mimeType ||
+        item.output?.mime_type ||
+        undefined;
+
+      if (item.inlineData?.mimeType && !mimeType) {
+        mimeType = item.inlineData.mimeType;
+      }
+
+      const containers = [item, item.image, item.media, item.output, item.generatedImage, item.result].filter(Boolean);
+
+      for (const container of containers) {
+        const base64 =
+          container?.inlineData?.data ||
+          container?.base64Data ||
+          container?.base64_data ||
+          container?.imageBytes ||
+          container?.image_bytes ||
+          container?.bytesBase64Encoded ||
+          container?.bytes_base64_encoded ||
+          container?.b64_json ||
+          container?.b64Json ||
+          container?.data;
+        if (base64) {
+          return { base64, mimeType: mimeType || container?.mimeType || container?.mime_type || 'image/png' };
+        }
+      }
+
+      const fileUri =
+        item.fileUri ||
+        item.file_uri ||
+        item.uri ||
+        item.imageUri ||
+        item.image_uri ||
+        item.image?.uri ||
+        item.image?.imageUri ||
+        item.media?.uri ||
+        item.media?.imageUri;
+
+      if (fileUri) {
+        return { fileUri, mimeType: mimeType || 'image/png' };
       }
     }
   }
@@ -239,10 +292,79 @@ const callLegacyImagenGenerate = async (model, prompt, axiosConfig) => {
     throw new Error('Legacy Imagen API response did not contain image data.');
   }
 
-  const buffer = Buffer.from(extracted.base64, 'base64');
-  const { relativePath } = await writeImageFile(model, buffer, extracted.mimeType);
+  let buffer = null;
+  let mimeType = extracted.mimeType;
+
+  if (extracted.base64) {
+    buffer = Buffer.from(extracted.base64, 'base64');
+  } else if (extracted.fileUri) {
+    const download = await downloadImageFromUri(extracted.fileUri, extracted.mimeType);
+    buffer = download.buffer;
+    mimeType = download.mimeType;
+  }
+
+  if (!buffer) {
+    throw new Error('Unable to resolve image binary from legacy Imagen response.');
+  }
+
+  const { relativePath } = await writeImageFile(model, buffer, mimeType);
   const tokens = response.data?.usageMetadata?.totalTokenCount || 0;
-  return { result: { url: relativePath, mimeType: extracted.mimeType }, tokens, modelUsed: model };
+  return { result: { url: relativePath, mimeType: mimeType || 'image/png' }, tokens, modelUsed: model };
+};
+
+const callImageGenerationEndpoint = async (prompt, axiosConfig) => {
+  const model = 'imagegeneration';
+  const url = `${GEMINI_IMAGE_API_BASE_URL}/models/${model}:generate?key=${GEMINI_API_KEY}`;
+  const payloadVariants = [
+    { prompt: { text: prompt } },
+    { textPrompt: { text: prompt } },
+    { text_prompts: [{ text: prompt }] },
+  ];
+
+  let lastError = null;
+
+  for (const payload of payloadVariants) {
+    try {
+      const response = await axios.post(url, payload, axiosConfig);
+
+      const blockReason = extractSafetyBlockReason(response.data);
+      if (blockReason) {
+        throw new Error(`Gemini image generation blocked: ${blockReason}`);
+      }
+
+      const extracted = extractBase64Image(response.data);
+      if (!extracted) {
+        throw new Error('Imagegeneration API response did not contain image data.');
+      }
+
+      let buffer = null;
+      let mimeType = extracted.mimeType;
+
+      if (extracted.base64) {
+        buffer = Buffer.from(extracted.base64, 'base64');
+      } else if (extracted.fileUri) {
+        const download = await downloadImageFromUri(extracted.fileUri, extracted.mimeType);
+        buffer = download.buffer;
+        mimeType = download.mimeType;
+      }
+
+      if (!buffer) {
+        throw new Error('Unable to resolve image binary from imagegeneration response.');
+      }
+
+      const resolvedModel = response.data?.modelVersion || model;
+      const { relativePath } = await writeImageFile(resolvedModel, buffer, mimeType);
+      const tokens = response.data?.usageMetadata?.totalTokenCount || 0;
+      return { result: { url: relativePath, mimeType: mimeType || 'image/png' }, tokens, modelUsed: resolvedModel };
+    } catch (error) {
+      lastError = error;
+      if (!shouldAttemptImageFallback(error)) {
+        throw error;
+      }
+    }
+  }
+
+  throw lastError || new Error('Imagegeneration endpoint failed with unknown error.');
 };
 
 const invokeImageModel = async (model, prompt) => {
@@ -260,12 +382,12 @@ const invokeImageModel = async (model, prompt) => {
   try {
     return await callGenerateContentImage(targetModel, prompt, axiosConfig);
   } catch (error) {
-    if (!shouldFallbackToImagenGenerate(error)) {
+    if (!shouldAttemptImageFallback(error)) {
       throw formatAxiosError(error, 'Image request failed');
     }
 
     console.warn(
-      `[ProviderManager] Falling back to legacy Imagen endpoint for model ${targetModel} (generateContent unsupported).`
+      `[ProviderManager] Falling back to alternate Gemini image endpoints for model ${targetModel} (generateContent unsupported).`
     );
 
     const candidates = collectLegacyImageCandidates(targetModel);
@@ -273,10 +395,18 @@ const invokeImageModel = async (model, prompt) => {
 
     for (const candidate of candidates) {
       try {
+        if (candidate === 'imagegeneration') {
+          console.warn('[ProviderManager] Switching to imagegeneration endpoint fallback.');
+          return await callImageGenerationEndpoint(prompt, axiosConfig);
+        }
+
+        console.warn(
+          `[ProviderManager] Trying legacy Imagen fallback model ${candidate} via :generate endpoint.`,
+        );
         return await callLegacyImagenGenerate(candidate, prompt, axiosConfig);
       } catch (legacyError) {
         lastError = legacyError;
-        if (!shouldFallbackToImagenGenerate(legacyError)) {
+        if (!shouldAttemptImageFallback(legacyError)) {
           throw formatAxiosError(legacyError, 'Image request failed');
         }
       }
