@@ -50,6 +50,12 @@ export class TaskStore {
     return nodes;
   }
 
+  static reset() {
+    tasks.clear();
+    nodes.clear();
+    taskIdCounter = 1;
+  }
+
   static getReadyNodes(taskId) {
     const task = tasks.get(taskId);
     if (!task || (task.status !== 'RUNNING' && task.status !== 'CREATED')) return [];
@@ -168,7 +174,9 @@ export class TaskStore {
     const newAgentId = `${originalAgentBaseId}_v${newAttempt}`;
     
     // Создаем новый GuardAgent, который будет проверять новый генеративный узел
-    const originalGuard = Array.from(nodes.values()).find(n => n.dependsOn.includes(originalNodeId) && n.agent_type === 'GuardAgent');
+    const originalGuard = Array.from(nodes.values()).find(
+      n => n.dependsOn.includes(originalNodeId) && n.agent_type === 'GuardAgent'
+    );
 
     const newNode = {
         id: newAgentId,
@@ -204,8 +212,22 @@ export class TaskStore {
         nodes.set(originalGuardId, { ...originalGuard, status: 'SKIPPED_RETRY', result_data: { nextGuard: newGuardId } });
         nodes.set(newGuardId, newGuardNode);
         tasks.get(taskId).nodes.push(newGuardId);
+
+        // Перенастраиваем зависимости всех последующих узлов, которые ссылались на оригинальный GuardAgent
+        const task = tasks.get(taskId);
+        if (task) {
+          for (const dependentId of task.nodes) {
+            const dependentNode = nodes.get(dependentId);
+            if (!dependentNode || !Array.isArray(dependentNode.dependsOn) || dependentId === newGuardId) {
+              continue;
+            }
+            if (dependentNode.dependsOn.includes(originalGuardId)) {
+              dependentNode.dependsOn = dependentNode.dependsOn.map(dep => (dep === originalGuardId ? newGuardId : dep));
+            }
+          }
+        }
     }
-    
+
     return newNode;
   }
 
