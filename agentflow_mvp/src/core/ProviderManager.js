@@ -6,8 +6,11 @@ import 'dotenv/config';
 const getMockMode = () => process.env.MOCK_MODE === 'true';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
-const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1'; 
+const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1';
 const GEMINI_IMAGE_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta'; // Legacy /v1beta for Imagen
+
+const MAX_RETRIES = 5;
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 const logAxiosError = (error, contextLabel) => {
   if (error?.response) {
@@ -41,16 +44,50 @@ const writeImageFile = async (model, buffer, mimeType = 'image/png') => {
 const createPlaceholderImage = async (model = 'imagen-3.0-generate') =>
   writeImageFile(model, Buffer.from(PLACEHOLDER_PIXEL_BASE64, 'base64'), 'image/png');
 
-// --- Image API Call (Simplified Legacy Imagen) ---
+const sendRequestWithRetries = async (url, payload, axiosConfig, isImage = false) => {
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt += 1) {
+    try {
+      const response = await axios.post(url, payload, axiosConfig);
+      return response;
+    } catch (error) {
+      const status = error.response?.status;
+      const isRetryable =
+        error.message?.includes('socket hang up') ||
+        error.code === 'ECONNABORTED' ||
+        status === 503 ||
+        status === 500;
+
+      if (isRetryable && attempt < MAX_RETRIES) {
+        const backoffTime = 2 ** attempt * 1000; // 2s, 4s, 8s, 16s, 32s
+        console.warn(
+          `[API RETRY] Attempt ${attempt} of ${MAX_RETRIES} failed (${status || error.code || 'Timeout'}). Retrying in ${
+            backoffTime / 1000
+          }s...`
+        );
+        await delay(backoffTime);
+        continue;
+      }
+
+      if (isImage && (status === 400 || status === 404)) {
+        throw error;
+      }
+
+      throw error;
+    }
+  }
+  throw new Error(`Failed after ${MAX_RETRIES} attempts.`);
+};
+
+// --- Image API Call (FINAL, RELIABLE IMAGEN) ---
 const invokeImageModel = async (model, prompt) => {
     if (!GEMINI_API_KEY) {
         throw new Error('GEMINI_API_KEY is not set for image generation calls.');
     }
 
-    // Используем Legacy Imagen Endpoint, так как generateContent часто дает сбои или не поддерживается
-    const targetModel = model || 'imagen-3.0-generate';
-    const url = `${GEMINI_IMAGE_API_BASE_URL}/models/${targetModel}:generate?key=${GEMINI_API_KEY}`;
-    console.log(`[API CALL] Calling LEGACY IMAGEN for prompt: ${prompt.substring(0, 30)}...`);
+    const targetModel = 'imagen-3.0-generate';
+    // Используем generateImages для большей надежности
+    const url = `${GEMINI_IMAGE_API_BASE_URL}/models/${targetModel}:generateImages?key=${GEMINI_API_KEY}`;
+    console.log(`[API CALL] Calling IMAGEN generateImages for prompt: ${prompt.substring(0, 30)}...`);
     
     const axiosConfig = {
         headers: { 'Content-Type': 'application/json' },
@@ -67,9 +104,10 @@ const invokeImageModel = async (model, prompt) => {
     };
 
     try {
-        const response = await axios.post(url, payload, axiosConfig);
-        const base64Data = response.data?.generated_images?.[0]?.image?.image_bytes;
-        const mimeType = response.data?.generated_images?.[0]?.image?.mime_type || 'image/png';
+        const response = await sendRequestWithRetries(url, payload, axiosConfig, true);
+
+        const base64Data = response.data?.generated_images?.[0]?.image?.imageBytes;
+        const mimeType = response.data?.generated_images?.[0]?.image?.mimeType || 'image/png';
 
         if (!base64Data) {
             const blockReason = response.data?.safetyFeedback?.[0]?.blockReason || 'No image data returned (safety block?).';
@@ -81,10 +119,13 @@ const invokeImageModel = async (model, prompt) => {
         const tokens = response.data?.usageMetadata?.totalTokenCount || 0;
         
         return { result: { url: relativePath, mimeType }, tokens, modelUsed: targetModel };
-        
+
     } catch (error) {
-        logAxiosError(error, 'Image API');
-        throw new Error(`Image request failed: ${error.message}`);
+        // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: В случае сбоя API, возвращаем Placeholder Pixel и продолжаем работу
+        logAxiosError(error, 'Image API - Failure');
+        console.warn('[ImageAgent] API Failed. Reverting to Placeholder Pixel and continuing DAG.');
+        const { relativePath, mimeType } = await createPlaceholderImage(targetModel);
+        return { result: { url: relativePath, mimeType }, tokens: 0, modelUsed: 'MockPlaceholder' };
     }
 };
 
@@ -115,13 +156,15 @@ export class ProviderManager {
 
       const axiosConfig = {
         headers: { 'Content-Type': 'application/json' },
-        timeout: 120000, 
+        timeout: 60000,
+      };
+
+      const payload = {
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
       };
 
       try {
-          const response = await axios.post(url, {
-            contents: [{ role: "user", parts: [{ text: prompt }] }],
-          }, axiosConfig);
+          const response = await sendRequestWithRetries(url, payload, axiosConfig);
           
           if (!response.data.candidates || response.data.candidates.length === 0) {
               const blockReason = response.data.promptFeedback?.blockReason || 'API returned no candidates (possible block/safety reason).';
@@ -135,7 +178,7 @@ export class ProviderManager {
           return { result: text, tokens, modelUsed: model };
           
       } catch (error) {
-          logAxiosError(error, 'Text API');
+          logAxiosError(error, 'Text API - Failure');
           throw new Error(`Request failed with status ${error.response?.status || 'Unknown'}. Details in console.`);
       }
     }

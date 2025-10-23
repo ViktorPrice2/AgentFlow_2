@@ -30,12 +30,9 @@ export class ImageAgent {
           model: modelUsed || IMAGE_MODEL,
           prompt: prompt.substring(0, 200),
           tokens,
+          mimeType: imageData.mimeType, // Добавляем mimeType
         },
       };
-
-      if (imageData.mimeType) {
-        resultData.metadata.mimeType = imageData.mimeType;
-      }
 
       logger.logStep(nodeId, 'END', { status: 'SUCCESS', path: resultData.imagePath });
 
