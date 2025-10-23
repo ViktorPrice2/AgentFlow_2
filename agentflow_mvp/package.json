@@ -13,7 +13,8 @@
     "axios": "^1.6.2",
     "express": "^4.18.2",
     "socket.io": "^4.7.2",
-    "vis-network": "^9.1.2"
+    "vis-network": "^9.1.2",
+    "@google/genai": "^0.15.0"
   },
   "devDependencies": {
     "vitest": "^1.0.1"
