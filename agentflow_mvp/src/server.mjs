@@ -95,6 +95,124 @@ const broadcastTaskUpdate = taskId => {
   });
 };
 
+const loadAgentModule = async agentType => {
+  switch (agentType) {
+    case 'WriterAgent': {
+      const { WriterAgent } = await import('./agents/WriterAgent.js');
+      return WriterAgent;
+    }
+    case 'ImageAgent': {
+      const { ImageAgent } = await import('./agents/ImageAgent.js');
+      return ImageAgent;
+    }
+    case 'VideoAgent': {
+      const { VideoAgent } = await import('./agents/VideoAgent.js');
+      return VideoAgent;
+    }
+    default:
+      return null;
+  }
+};
+
+const getTaskDefaultWriterNode = task => {
+  const nodes = task?.dagPlan?.nodes;
+  if (!Array.isArray(nodes)) {
+    return null;
+  }
+  return nodes.find(node => (node.agent || node.agent_type) === 'WriterAgent') || null;
+};
+
+const getTaskDefaultTone = task => {
+  const writerNode = getTaskDefaultWriterNode(task);
+  return writerNode?.input?.tone || writerNode?.input_data?.tone || null;
+};
+
+const getTaskDefaultTopic = task => {
+  const writerNode = getTaskDefaultWriterNode(task);
+  return writerNode?.input?.topic || writerNode?.input_data?.topic || '';
+};
+
+const determineAgentTypeForScheduleItem = scheduleItem => {
+  const type = (scheduleItem?.type || '').toLowerCase();
+  if (type.includes('video')) return 'VideoAgent';
+  if (
+    type.includes('image') ||
+    type.includes('visual') ||
+    type.includes('graphic') ||
+    type.includes('design') ||
+    type.includes('creative')
+  ) {
+    return 'ImageAgent';
+  }
+  return 'WriterAgent';
+};
+
+const composeSchedulePrompt = (scheduleItem, task) => {
+  const typeLabel = scheduleItem?.type || 'контент';
+  const channel = scheduleItem?.channel || 'основного канала';
+  const promptParts = [
+    `Создай ${typeLabel} для ${channel}.`,
+    scheduleItem?.topic ? `Тема: ${scheduleItem.topic}.` : '',
+    scheduleItem?.objective ? `Цель: ${scheduleItem.objective}.` : '',
+    scheduleItem?.notes ? `Особые заметки: ${scheduleItem.notes}.` : '',
+    scheduleItem?.date ? `Дата публикации: ${scheduleItem.date}.` : '',
+  ].filter(Boolean);
+
+  if (promptParts.length === 0) {
+    const fallbackTopic = scheduleItem?.topic || getTaskDefaultTopic(task) || task?.name || 'кампании';
+    return `Создай ${typeLabel} на тему ${fallbackTopic}.`;
+  }
+
+  return promptParts.join(' ');
+};
+
+const buildScheduleContext = (scheduleItem, promptText) => {
+  const previousContent = typeof scheduleItem?.content === 'string' ? scheduleItem.content.trim() : '';
+  return {
+    date: scheduleItem?.date || '',
+    type: scheduleItem?.type || '',
+    channel: scheduleItem?.channel || '',
+    topic: scheduleItem?.topic || '',
+    objective: scheduleItem?.objective || '',
+    notes: scheduleItem?.notes || '',
+    summary: promptText,
+    previousContent,
+    script: previousContent,
+    visualPrompt: previousContent,
+  };
+};
+
+const mapGenerationResultToContent = (agentType, result) => {
+  if (agentType === 'WriterAgent') {
+    return {
+      content: (result?.text || '').trim(),
+      payload: result,
+    };
+  }
+
+  if (agentType === 'ImageAgent') {
+    const prompt = result?.finalImagePrompt || result?.prompt || '';
+    return {
+      content: typeof prompt === 'string' ? prompt.trim() : '',
+      payload: result,
+    };
+  }
+
+  if (agentType === 'VideoAgent') {
+    const prompt = result?.final_video_prompt || '';
+    const serialized = result ? JSON.stringify(result, null, 2) : '';
+    return {
+      content: prompt ? prompt.trim() : serialized,
+      payload: result,
+    };
+  }
+
+  return {
+    content: '',
+    payload: result,
+  };
+};
+
 io.on('connection', socket => {
   console.log(`Client connected: ${socket.id}`);
   socket.on('disconnect', () => {
@@ -255,6 +373,97 @@ app.post('/api/tasks/:taskId/schedule/update', (req, res) => {
 
   broadcastTaskUpdate(taskId);
   res.json({ success: true, scheduleItem: updatedItem });
+});
+
+app.post('/api/tasks/:taskId/schedule/generate/:index', async (req, res) => {
+  const { taskId, index } = req.params;
+
+  const parsedIndex = Number.parseInt(index, 10);
+  if (!Number.isInteger(parsedIndex) || parsedIndex < 0) {
+    return res.status(400).json({ success: false, message: 'Index must be a valid integer.' });
+  }
+
+  const task = TaskStore.getTask(taskId);
+  if (!task) {
+    return res.status(404).json({ success: false, message: 'Task not found.' });
+  }
+
+  const schedule = TaskStore.getTaskSchedule(taskId);
+  const scheduleItem = schedule?.[parsedIndex];
+  if (!scheduleItem) {
+    return res.status(404).json({ success: false, message: 'Schedule item not found.' });
+  }
+
+  const agentType = determineAgentTypeForScheduleItem(scheduleItem);
+  const promptText = composeSchedulePrompt(scheduleItem, task);
+  const scheduleContext = buildScheduleContext(scheduleItem, promptText);
+  const tone = scheduleItem?.tone || getTaskDefaultTone(task) || 'enthusiastic';
+  const topic = scheduleItem?.topic || getTaskDefaultTopic(task) || task?.name || 'кампанию';
+
+  const inputData = {
+    topic,
+    tone,
+    promptOverride: promptText,
+    description: promptText,
+    scheduleContext,
+  };
+
+  if (agentType === 'ImageAgent') {
+    inputData.description = promptText;
+  }
+
+  if (agentType === 'VideoAgent') {
+    inputData.scheduleContext = {
+      ...scheduleContext,
+      script: scheduleContext.previousContent || scheduleContext.summary,
+    };
+  }
+
+  const tempNode = TaskStore.createTemporaryNode(taskId, agentType, inputData);
+  if (!tempNode) {
+    return res.status(500).json({ success: false, message: 'Unable to prepare temporary node for generation.' });
+  }
+
+  TaskStore.updateScheduleItem(taskId, parsedIndex, {
+    status: 'CONTENT_GENERATING',
+    generation_error: null,
+  });
+  broadcastTaskUpdate(taskId);
+
+  res.json({
+    success: true,
+    message: `Запущена генерация контента (${agentType}) для элемента ${parsedIndex + 1}.`,
+  });
+
+  try {
+    tempNode.status = 'RUNNING';
+    const AgentModule = await loadAgentModule(agentType);
+    if (!AgentModule || typeof AgentModule.execute !== 'function') {
+      throw new Error(`Agent module ${agentType} is not available.`);
+    }
+
+    const result = await AgentModule.execute(tempNode.id);
+    const { content, payload } = mapGenerationResultToContent(agentType, result);
+
+    TaskStore.updateScheduleItem(taskId, parsedIndex, {
+      content,
+      content_prompt: payload,
+      status: 'CONTENT_READY',
+      last_generated_at: new Date().toISOString(),
+      last_generated_id: tempNode.id,
+      generation_error: null,
+    });
+    broadcastTaskUpdate(taskId);
+  } catch (error) {
+    console.error(`Error generating content for task ${taskId} schedule index ${parsedIndex}:`, error);
+    TaskStore.updateScheduleItem(taskId, parsedIndex, {
+      status: 'CONTENT_FAILED',
+      generation_error: error?.message || 'Generation failed.',
+    });
+    broadcastTaskUpdate(taskId);
+  } finally {
+    TaskStore.removeNode(tempNode.id);
+  }
 });
 
 app.get('/api/logs/:taskId', (req, res) => {

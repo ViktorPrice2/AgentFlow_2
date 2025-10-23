@@ -51,15 +51,45 @@ export class VideoAgent {
     const writerResult = findResult(agentType => agentType === 'WriterAgent');
     const imageResult = findResult(agentType => agentType === 'ImageAgent');
 
-    const textResult = guardResult?.approvedContent || writerResult?.text || '';
-    const imagePrompt = imageResult?.finalImagePrompt || 'Key image prompt not available.';
+    const scheduleContext = node.input_data?.scheduleContext || {};
+    const overrideScript =
+      node.input_data?.promptOverride ||
+      scheduleContext.script ||
+      scheduleContext.summary ||
+      '';
+
+    const contextNarrative = [
+      scheduleContext.topic ? `Тема: ${scheduleContext.topic}.` : '',
+      scheduleContext.objective ? `Цель: ${scheduleContext.objective}.` : '',
+      scheduleContext.notes ? `Заметки: ${scheduleContext.notes}.` : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+
+    const textResultSource = guardResult?.approvedContent || writerResult?.text || overrideScript || contextNarrative;
+    const textResult = (textResultSource || '').trim();
+
+    const imagePrompt =
+      imageResult?.finalImagePrompt ||
+      scheduleContext.visualPrompt ||
+      scheduleContext.summary ||
+      'Key image prompt not available.';
+
+    const scheduleDetails = [
+      scheduleContext.channel ? `Канал публикации: ${scheduleContext.channel}.` : '',
+      scheduleContext.type ? `Тип контента: ${scheduleContext.type}.` : '',
+      scheduleContext.date ? `Запланированная дата: ${scheduleContext.date}.` : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
 
     // ПРОМПТ ДЛЯ СОЗДАНИЯ СЦЕНАРИЯ И ПРОМПТА
     const promptToGemini = [
       'Вы — креативный директор. Создайте сценарий видеоролика (30 сек) и промпт для генератора видео.',
       'Сценарий должен состоять из 3-х сцен.',
-      `Используйте этот текст как основу для дикторского текста: ${textResult.substring(0, 500)}`,
+      textResult ? `Используйте этот текст как основу для дикторского текста: ${textResult.substring(0, 500)}` : '',
       `Используйте этот промпт для визуального ряда: ${imagePrompt}`,
+      scheduleDetails,
       'Ваш ответ должен быть ТОЛЬКО в формате JSON-объекта, без каких-либо пояснений или дополнительного текста. Пример: {"scenes": [{"time": "0-10s", "text": "...", "visual_description": "..."}], "final_video_prompt": "..."}',
     ].join(' ');
 
