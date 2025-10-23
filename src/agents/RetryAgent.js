@@ -17,11 +17,11 @@ export class RetryAgent {
     }
 
     const logger = new Logger(node.taskId);
-    const failedGuardNodeId = payload.failedNodeId || node.input_data?.failedNodeId;
+    const failedGuardNodeId = payload.failedGuardNodeId || payload.failedNodeId || node.input_data?.failedGuardNodeId || node.input_data?.failedNodeId;
 
     if (!failedGuardNodeId) {
-      logger.logStep(nodeId, 'ERROR', { message: 'RetryAgent missing failedNodeId context.' });
-      TaskStore.updateNodeStatus(nodeId, 'FAILED', { error: 'failedNodeId not provided.' });
+      logger.logStep(nodeId, 'ERROR', { message: 'RetryAgent missing failedGuardNodeId context.' });
+      TaskStore.updateNodeStatus(nodeId, 'FAILED', { error: 'failedGuardNodeId not provided.' });
       return;
     }
 
@@ -32,9 +32,9 @@ export class RetryAgent {
         return;
     }
 
-    const dependencyId = failedGuardNode.dependsOn?.[0]; // Оригинальный генеративный узел (e.g., node1)
+    const dependencyId = failedGuardNode.dependsOn?.[0];
     const dependencyNode = TaskStore.getNode(dependencyId);
-    
+
     if (!dependencyNode) {
       logger.logStep(nodeId, 'ERROR', { message: `Dependency node ${dependencyId} not found.` });
       TaskStore.updateNodeStatus(nodeId, 'FAILED', { error: `Dependency node ${dependencyId} not found.` });
@@ -42,37 +42,35 @@ export class RetryAgent {
     }
 
     const reason = failedGuardNode.result_data?.reason || 'Unknown failure reason';
-    const originalInput = clone(dependencyNode.input_data); // Входные данные для WriterAgent/ImageAgent
+    const originalInput = clone(dependencyNode.input_data);
 
     logger.logStep(nodeId, 'START', {
       message: `Generating corrective prompt for ${dependencyId}`,
       reason,
     });
 
-    const correctionPrompt = `The previous attempt to generate content failed because: ${reason}. Original request: ${JSON.stringify(
-      originalInput
-    )}. Provide a revised prompt that keeps the request intent but fixes the issue. Output only the revised prompt text.`;
+    const originalPromptText = originalInput.promptOverride ||
+      (originalInput.tone && originalInput.topic
+        ? `Write an ${originalInput.tone} article about ${originalInput.topic}.`
+        : originalInput.rawPrompt || 'the provided request');
+
+    const correctionPrompt = `The previous attempt to generate content failed because: ${reason}. The original prompt was: ${originalPromptText}. Provide a revised prompt that keeps the original request intent but fixes the issue. Output only the revised prompt text.`;
 
     try {
       const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
       const { result: newPromptText } = await ProviderManager.invoke(model, correctionPrompt, 'text');
 
-      // 1. Создание обновленных входных данных
       const updatedInput = clone(originalInput);
-      // Мы помещаем новый промпт в 'promptOverride', который WriterAgent использует
-      updatedInput.promptOverride = newPromptText.trim(); 
+      updatedInput.promptOverride = newPromptText.trim();
       updatedInput.retryCount = (originalInput.retryCount || 0) + 1;
 
-      // 2. Создание нового генеративного узла (e.g., node1_v2)
       const correctiveNode = TaskStore.createCorrectiveNode(dependencyId, updatedInput);
-      
+
       if (!correctiveNode) {
           throw new Error('Max retry limit reached or failed to create corrective node.');
       }
-      
-      // 3. Отмечаем старый узел и GuardAgent как SKIPPED/OVERRIDDEN
-      TaskStore.prepareNodeForRetry(failedGuardNodeId, correctiveNode.id);
 
+      TaskStore.prepareNodeForRetry(failedGuardNodeId, correctiveNode.id);
 
       TaskStore.updateNodeStatus(nodeId, 'SUCCESS', {
         correctiveNodeId: correctiveNode.id,

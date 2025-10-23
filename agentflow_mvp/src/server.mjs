@@ -31,7 +31,7 @@ const broadcastTaskUpdate = taskId => {
   const nodes = taskData.nodes
     .map(id => TaskStore.getNode(id))
     .filter(Boolean)
-    .map(node => ({ ...node }));
+    .map(node => ({ ...node, agent: node.agent_type }));
 
   io.emit('task-update', {
     taskId,
@@ -80,8 +80,9 @@ app.post('/api/tasks/start', async (req, res) => {
 });
 
 app.get('/api/tasks', (req, res) => {
-  const tasksMap = TaskStore.tasks instanceof Map ? TaskStore.tasks : new Map();
-  const tasksList = Array.from(tasksMap.entries()).map(([id, task]) => ({
+  const tasksMap = TaskStore.getAllTasks();
+  const entries = tasksMap instanceof Map ? tasksMap.entries() : [];
+  const tasksList = Array.from(entries).map(([id, task]) => ({
     id,
     name: task.name,
     status: task.status,
@@ -153,9 +154,7 @@ app.post('/api/tasks/:taskId/restart/:nodeId', (req, res) => {
 
   parsedInput.retryCount = (dependencyNode.input_data?.retryCount || 0) + 1;
 
-  const correctiveNode = TaskStore.createCorrectiveNode(dependencyId, {
-    input_data: parsedInput,
-  });
+  const correctiveNode = TaskStore.createCorrectiveNode(dependencyId, parsedInput);
 
   if (!correctiveNode) {
     return res.status(500).json({ success: false, message: 'Failed to create corrective node.' });
