@@ -433,14 +433,17 @@ ${node.status}`,
             const humanGateNode = visData.nodes.get('node3_human_review')?.nodeData;
             const isStrategyComplete = strategyNode?.status === 'SUCCESS';
             const isPaused = humanGateNode?.status === 'PAUSED';
-            const canEditPlan = isStrategyComplete && !isPaused;
+            const isHumanGateComplete = humanGateNode?.status === 'SUCCESS';
+            const hasHumanGate = Boolean(humanGateNode);
+            const isPlanApproved = isStrategyComplete && (hasHumanGate ? isHumanGateComplete : true);
+            const canEditPlan = isPlanApproved;
             const planDisabledAttr = canEditPlan ? '' : 'disabled';
             const metricsDisabledAttr = isPaused ? '' : 'disabled';
-            const generatorDisabledAttr = isPaused ? '' : 'disabled';
+            const generatorDisabledAttr = (isPaused || isPlanApproved) ? '' : 'disabled';
 
             const statusNotice = isPaused
                 ? 'Расписание ожидает подтверждения и ввода метрик.'
-                : canEditPlan
+                : isPlanApproved
                     ? 'Расписание одобрено. Можно корректировать план и темы.'
                     : 'Расписание формируется автоматически.';
 
