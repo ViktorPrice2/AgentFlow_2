@@ -24,9 +24,15 @@
   "devDependencies": {
     "vitest": "^1.0.1",
     "pkg": "^5.8.1",
-    "esbuild": "^0.21.5"
+    "esbuild": "^0.21.5",
+    "ejs": "^3.1.9",
+    "pug": "^3.0.2"
   },
   "pkg": {
+    "scripts": [
+      "node_modules/ejs/**/*.js",
+      "node_modules/pug/**/*.js"
+    ],
     "assets": [
       "public/**/*",
       "plans/**/*"
