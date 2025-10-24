@@ -1,22 +1,26 @@
 // CJS WRAPPER: Этот файл является точкой входа для pkg (должен быть CJS).
 // Его задача - загрузить основной код в режиме ES Module.
 
-const dotenv = require('dotenv');
 const path = require('path');
 const fs = require('fs');
 
-// Имитация dotenv/config для pkg (хотя dotenv уже установлен)
-// Мы загружаем .env вручную, чтобы убедиться в доступности ключей.
-const envPath = path.resolve(process.cwd(), '.env');
-if (fs.existsSync(envPath)) {
-    dotenv.config({ path: envPath });
+// 1. Загрузка dotenv (CommonJS-стиль)
+try {
+    const dotenv = require('dotenv');
+    const envPath = path.resolve(process.cwd(), '.env');
+    if (fs.existsSync(envPath)) {
+        dotenv.config({ path: envPath });
+    }
+} catch (e) {
+    console.warn('Could not load dotenv:', e.message);
 }
 
-// Мы должны использовать require для dotenv, но основной код - ESM.
-// Динамический import() - единственный надежный способ загрузки ESM из CJS.
+// 2. Динамический импорт основного ESM-кода (src/server.mjs)
+// pkg знает, что 'src/server.mjs' находится внутри его snapshot.
+// Динамический import() - единственный надежный способ.
 (async () => {
     try {
-        // pkg упаковывает src/server.mjs (или .js) в src/server.js
+        // Мы импортируем src/server.mjs (потому что он ESM)
         await import('./server.mjs');
     } catch (error) {
         console.error('Fatal Error during AgentFlow startup:', error);
