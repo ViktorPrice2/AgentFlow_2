@@ -2,15 +2,15 @@
   "name": "agentflow_mvp",
   "version": "1.0.0",
   "description": "AgentFlow 2.0 MVP Skeleton with Web UI (150/100)",
-  "main": "src/start.js",
+  "main": "src/server.js",
   "type": "module",
   "bin": {
-    "agentflow": "src/start.js"
+    "agentflow": "src/server.js"
   },
   "scripts": {
-    "start": "node src/server.mjs",
+    "start": "node src/server.js",
     "test": "vitest run",
-    "build:exe": "pkg . --targets node18-win-x64 --output agentflow-launcher.exe"
+    "build:exe": "pkg . --targets node18-win-x64 --output agentflow-launcher.exe --no-bytecode --public-packages \"*\" --public"
   },
   "dependencies": {
     "dotenv": "^16.3.1",
@@ -26,8 +26,7 @@
   },
   "pkg": {
     "scripts": [
-      "src/**/*.js",
-      "src/**/*.mjs"
+      "src/**/*.js"
     ],
     "assets": [
       "public/**/*",
