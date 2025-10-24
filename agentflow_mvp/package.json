@@ -2,15 +2,16 @@
   "name": "agentflow_mvp",
   "version": "1.0.0",
   "description": "AgentFlow 2.0 MVP Skeleton with Web UI (150/100)",
-  "main": "src/main.cjs",
+  "main": "src/server.mjs",
   "type": "module",
   "bin": {
-    "agentflow": "src/main.cjs"
+    "agentflow": "src/server.mjs"
   },
   "scripts": {
     "start": "node src/server.mjs",
     "test": "vitest run",
-    "build:exe": "pkg . --targets node18-win-x64 --output agentflow-launcher.exe"
+    "build": "esbuild src/server.mjs --bundle --platform=node --outfile=dist/server.cjs --format=cjs",
+    "build:exe": "npm run build && pkg dist/server.cjs --targets node18-win-x64 --output agentflow-launcher.exe"
   },
   "dependencies": {
     "dotenv": "^16.3.1",
@@ -22,19 +23,13 @@
   },
   "devDependencies": {
     "vitest": "^1.0.1",
-    "pkg": "^5.8.1"
+    "pkg": "^5.8.1",
+    "esbuild": "^0.21.5"
   },
   "pkg": {
-    "scripts": [
-      "src/**/*.js",
-      "src/**/*.mjs",
-      "src/**/*.cjs"
-    ],
     "assets": [
       "public/**/*",
-      "plans/**/*",
-      "node_modules/@google/genai/dist/**/*.js",
-      "node_modules/vis-network/dist/**/*"
+      "plans/**/*"
     ],
     "targets": [
       "node18-win-x64"
