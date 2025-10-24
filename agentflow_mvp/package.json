@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node src/server.js",
     "test": "vitest run",
-    "build:exe": "pkg . --targets node18-win-x64 --output agentflow-launcher.exe --no-bytecode"
+    "build:exe": "pkg . --targets node18-win-x64 --output agentflow-launcher.exe"
   },
   "dependencies": {
     "dotenv": "^16.3.1",
@@ -36,9 +36,6 @@
     ],
     "targets": [
       "node18-win-x64"
-    ],
-    "options": {
-      "noBytecode": true
-    }
+    ]
   }
 }
