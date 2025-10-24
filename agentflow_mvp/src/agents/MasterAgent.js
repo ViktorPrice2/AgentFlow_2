@@ -1,17 +1,24 @@
 import { TaskStore } from '../core/db/TaskStore.js';
 import { QueueService } from '../core/queue/QueueService.js';
 
-// AGENT_MAP должен быть определен через top-level await в ESM
-const AGENT_MAP = {
-  WriterAgent: (await import('./WriterAgent.js')).WriterAgent,
-  ImageAgent: (await import('./ImageAgent.js')).ImageAgent, // ImagePromptAgent
-  VideoAgent: (await import('./VideoAgent.js')).VideoAgent, // VideoPromptAgent
-  GuardAgent: (await import('./GuardAgent.js')).GuardAgent,
-  RetryAgent: (await import('./RetryAgent.js')).RetryAgent,
-  HumanGateAgent: (await import('./HumanGateAgent.js')).HumanGateAgent,
-  ProductAnalysisAgent: (await import('./ProductAnalysisAgent.js')).ProductAnalysisAgent,
-  StrategyAgent: (await import('./StrategyAgent.js')).StrategyAgent,
-  StrategyReviewAgent: (await import('./StrategyReviewAgent.js')).StrategyReviewAgent,
+let agentModuleCache = null;
+
+const loadAgentModule = async agentType => {
+  if (!agentModuleCache) {
+    agentModuleCache = {
+      WriterAgent: (await import('./WriterAgent.js')).WriterAgent,
+      ImageAgent: (await import('./ImageAgent.js')).ImageAgent, // ImagePromptAgent
+      VideoAgent: (await import('./VideoAgent.js')).VideoAgent, // VideoPromptAgent
+      GuardAgent: (await import('./GuardAgent.js')).GuardAgent,
+      RetryAgent: (await import('./RetryAgent.js')).RetryAgent,
+      HumanGateAgent: (await import('./HumanGateAgent.js')).HumanGateAgent,
+      ProductAnalysisAgent: (await import('./ProductAnalysisAgent.js')).ProductAnalysisAgent,
+      StrategyAgent: (await import('./StrategyAgent.js')).StrategyAgent,
+      StrategyReviewAgent: (await import('./StrategyReviewAgent.js')).StrategyReviewAgent,
+    };
+  }
+
+  return agentModuleCache[agentType] || null;
 };
 
 const FINAL_NODE_STATUSES = new Set(['SUCCESS', 'FAILED', 'MANUALLY_OVERRIDDEN', 'SKIPPED_RETRY']);
@@ -25,7 +32,7 @@ async function processJob(job, onUpdate) {
     onUpdate(node.taskId);
   }
 
-  const AgentModule = AGENT_MAP[agentType];
+  const AgentModule = await loadAgentModule(agentType);
   if (!AgentModule) {
     TaskStore.updateNodeStatus(nodeId, 'FAILED', { error: `Agent ${agentType} not found.` });
     if (typeof onUpdate === 'function') {
