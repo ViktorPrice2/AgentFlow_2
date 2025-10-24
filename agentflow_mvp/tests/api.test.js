@@ -9,6 +9,7 @@ test('ProviderManager: Must successfully call REAL Gemini API in production mode
     
     if (!process.env.GEMINI_API_KEY) {
         console.warn('Skipping Gemini API test: GEMINI_API_KEY not set. Set MOCK_MODE=false in .env to run.');
+        process.env.MOCK_MODE = 'true';
         return;
     }
 

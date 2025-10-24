@@ -93,6 +93,7 @@ export class StrategyAgent {
     const analysisResult = analysisNodeId ? TaskStore.getResult(analysisNodeId) : null;
     const topic = node.input_data?.topic || 'Контент-стратегия';
     const formatClause = formatInstructionsToText(node.input_data?.format);
+    const isMockMode = process.env.MOCK_MODE === 'true';
 
     const kqm = Array.isArray(analysisResult?.kqm) && analysisResult.kqm.length
       ? analysisResult.kqm.join(', ')
@@ -101,6 +102,51 @@ export class StrategyAgent {
       ? analysisResult.channels.join(', ')
       : 'нет данных';
     const insights = Array.isArray(analysisResult?.insights) ? analysisResult.insights.slice(0, 5).join('; ') : '';
+
+    if (isMockMode) {
+      const schedule = [
+        {
+          date: '2024-01-01',
+          type: 'post',
+          channel: 'Email',
+          topic: `Launch: ${topic}`,
+          objective: 'Drive signups from existing list',
+          notes: 'Repurpose approved copy into 3 bullet benefits.',
+        },
+        {
+          date: '2024-01-02',
+          type: 'post',
+          channel: 'Paid Social',
+          topic: `Retarget interested buyers - ${topic}`,
+          objective: 'Increase CTR to 2.5%',
+          notes: 'Use dynamic product set, CTA "Claim Your Trial".',
+        },
+        {
+          date: '2024-01-03',
+          type: 'visual',
+          channel: 'Influencer Collaborations',
+          topic: 'Behind-the-scenes demo',
+          objective: 'Collect 15 qualified leads',
+          notes: 'Provide talking points aligned with KQM outcomes.',
+        },
+      ];
+
+      const strategyResult = {
+        schedule,
+        summary: 'Three-day staged launch touching email, paid social, and creators to reinforce KQM.',
+      };
+
+      TaskStore.updateTaskSchedule(node.taskId, schedule);
+
+      logger.logStep(nodeId, 'END', {
+        status: 'SUCCESS',
+        publications: schedule.length,
+        mock: true,
+      });
+
+      TaskStore.updateNodeStatus(nodeId, 'SUCCESS', strategyResult, 0);
+      return strategyResult;
+    }
 
     const prompt = [
       'Вы — маркетолог-стратег. На основе анализа продукта создайте подробный план контента на 5 дней.',

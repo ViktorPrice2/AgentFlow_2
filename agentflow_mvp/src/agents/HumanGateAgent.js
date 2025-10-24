@@ -16,6 +16,20 @@ export class HumanGateAgent {
 
     const logger = new Logger(node.taskId);
     const pauseReason = node.input_data?.reason || payload?.reason || 'Awaiting human review/data input.';
+    const isMockMode = process.env.MOCK_MODE === 'true';
+
+    if (isMockMode) {
+      const autoReview = {
+        status: 'APPROVED',
+        reviewed_by: 'Mock Reviewer',
+        approved_at: new Date().toISOString(),
+        notes: 'Automatically approved in MOCK_MODE for integration tests.',
+      };
+
+      logger.logStep(nodeId, 'END', { message: 'Auto-approved by HumanGateAgent in mock mode.' });
+      TaskStore.updateNodeStatus(nodeId, 'SUCCESS', autoReview, 0);
+      return autoReview;
+    }
 
     logger.logStep(nodeId, 'PAUSE', { message: pauseReason });
     TaskStore.updateNodeStatus(nodeId, 'PAUSED', { reason: pauseReason });

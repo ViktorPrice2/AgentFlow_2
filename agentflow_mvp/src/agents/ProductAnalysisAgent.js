@@ -70,6 +70,30 @@ export class ProductAnalysisAgent {
     const baseText = upstreamResult?.approvedContent || upstreamResult?.text || '';
     const topic = node.input_data?.topic || 'Продукт';
     const formatClause = formatInstructionsToText(node.input_data?.format);
+    const isMockMode = process.env.MOCK_MODE === 'true';
+
+    if (isMockMode) {
+      const stub = {
+        kqm: [
+          `Increase engagement for ${topic}`,
+          'Improve click-through rate across paid channels',
+        ],
+        channels: ['Email Drip', 'Paid Social', 'Influencer Collaborations'],
+        insights: baseText
+          ? [`Leverage approved copy: ${baseText.slice(0, 80)}...`]
+          : ['No upstream copy provided; generate fresh messaging.'],
+      };
+
+      logger.logStep(nodeId, 'END', {
+        status: 'SUCCESS',
+        metrics: stub.kqm.length,
+        channels: stub.channels.length,
+        mock: true,
+      });
+
+      TaskStore.updateNodeStatus(nodeId, 'SUCCESS', stub, 0);
+      return stub;
+    }
 
     const prompt = [
       'Вы — старший аналитик по маркетингу. На основе входного текста и темы составьте краткий анализ продукта.',
