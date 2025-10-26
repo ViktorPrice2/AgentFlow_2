@@ -13,21 +13,24 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-dark: #05060f;
-            --bg-surface: rgba(20, 24, 38, 0.88);
-            --bg-card: rgba(23, 27, 42, 0.95);
-            --bg-card-alt: rgba(18, 21, 34, 0.92);
-            --bg-input: rgba(30, 36, 54, 0.9);
-            --border-color: rgba(68, 78, 107, 0.45);
-            --accent-blue: #3b82f6;
-            --accent-cyan: #22d3ee;
-            --accent-purple: #a855f7;
-            --text-main: #f9fafb;
-            --text-light: #cbd5f5;
-            --text-muted: #9ca3af;
-            --success: #34d399;
-            --warning: #fbbf24;
-            --danger: #f87171;
+            --bg-page: #f3f5fb;
+            --bg-card: #ffffff;
+            --bg-card-alt: #f6f8ff;
+            --bg-soft: #eef2ff;
+            --bg-input: #edf2ff;
+            --border-color: rgba(148, 163, 184, 0.4);
+            --border-strong: rgba(100, 116, 139, 0.65);
+            --accent-blue: #2563eb;
+            --accent-cyan: #0ea5e9;
+            --accent-purple: #8b5cf6;
+            --text-main: #0f172a;
+            --text-secondary: #1f2937;
+            --text-light: #334155;
+            --text-muted: #475569;
+            --text-soft: #6b7280;
+            --success: #059669;
+            --warning: #d97706;
+            --danger: #dc2626;
         }
 
         * {
@@ -38,23 +41,10 @@
             font-family: 'Inter', sans-serif;
             margin: 0;
             padding: 32px;
-            background: radial-gradient(circle at 20% 20%, rgba(59, 130, 246, 0.15), transparent 45%),
-                        radial-gradient(circle at 80% 0%, rgba(168, 85, 247, 0.18), transparent 55%),
-                        radial-gradient(circle at 50% 80%, rgba(14, 165, 233, 0.16), transparent 60%),
-                        var(--bg-dark);
-            color: var(--text-light);
+            background: linear-gradient(180deg, rgba(226, 232, 240, 0.6) 0%, rgba(243, 244, 255, 0.8) 35%, #ffffff 100%);
+            color: var(--text-secondary);
             min-height: 100vh;
             overflow-x: hidden;
-        }
-
-        body::before {
-            content: '';
-            position: fixed;
-            inset: 0;
-            background: linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(14, 116, 144, 0.05));
-            mix-blend-mode: screen;
-            pointer-events: none;
-            z-index: -1;
         }
 
         .container {
@@ -68,26 +58,10 @@
         .card {
             position: relative;
             background: var(--bg-card);
-            border-radius: 20px;
+            border-radius: 18px;
             padding: 28px;
-            border: 1px solid rgba(148, 163, 184, 0.12);
-            box-shadow: 0 25px 55px rgba(8, 15, 35, 0.55);
-            overflow: hidden;
-        }
-
-        .card::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background: radial-gradient(circle at top left, rgba(59, 130, 246, 0.16), transparent 45%),
-                        radial-gradient(circle at bottom right, rgba(22, 163, 74, 0.12), transparent 55%);
-            opacity: 0.8;
-            z-index: 0;
-        }
-
-        .card > * {
-            position: relative;
-            z-index: 1;
+            border: 1px solid rgba(148, 163, 184, 0.28);
+            box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
         }
 
         .page-hero {
@@ -255,12 +229,12 @@
             display: inline-flex;
             align-items: center;
             gap: 10px;
-            background: rgba(59, 130, 246, 0.08);
+            background: rgba(37, 99, 235, 0.08);
             padding: 10px 14px;
             border-radius: 12px;
-            border: 1px solid rgba(59, 130, 246, 0.16);
+            border: 1px solid rgba(37, 99, 235, 0.14);
             font-size: 0.95rem;
-            color: var(--text-light);
+            color: var(--text-secondary);
         }
 
         .checkbox span {
@@ -279,8 +253,8 @@
             margin-top: 22px;
             padding: 18px;
             border-radius: 14px;
-            background: rgba(30, 41, 59, 0.45);
-            border: 1px solid rgba(100, 116, 139, 0.2);
+            background: var(--bg-card-alt);
+            border: 1px solid rgba(148, 163, 184, 0.35);
         }
 
         .format-grid {
@@ -302,7 +276,7 @@
             border: none;
             border-radius: 14px;
             padding: 12px 20px;
-            background: linear-gradient(135deg, var(--accent-blue), #1d4ed8);
+            background: linear-gradient(135deg, #2563eb, #1d4ed8);
             color: white;
             letter-spacing: 0.02em;
             transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
@@ -321,12 +295,12 @@
         }
 
         button.secondary {
-            background: rgba(148, 163, 184, 0.18);
-            color: var(--text-light);
+            background: rgba(99, 102, 241, 0.12);
+            color: var(--accent-blue);
         }
 
         button.secondary:hover:not(:disabled) {
-            background: rgba(148, 163, 184, 0.28);
+            background: rgba(99, 102, 241, 0.2);
             box-shadow: none;
         }
 
@@ -352,21 +326,21 @@
             gap: 12px;
             padding: 14px 16px;
             border-radius: 14px;
-            background: rgba(30, 41, 59, 0.55);
-            border: 1px solid rgba(148, 163, 184, 0.16);
+            background: var(--bg-card-alt);
+            border: 1px solid rgba(148, 163, 184, 0.3);
             transition: border-color 0.2s ease, transform 0.2s ease, background 0.2s ease;
         }
 
         .task-item:hover {
-            border-color: rgba(59, 130, 246, 0.45);
-            background: rgba(30, 41, 59, 0.75);
+            border-color: rgba(37, 99, 235, 0.45);
+            background: #eef2ff;
             transform: translateX(2px);
         }
 
         .task-item.active {
-            border-color: rgba(59, 130, 246, 0.85);
-            background: rgba(30, 64, 175, 0.35);
-            box-shadow: 0 0 25px rgba(59, 130, 246, 0.25);
+            border-color: rgba(37, 99, 235, 0.85);
+            background: rgba(219, 234, 254, 0.85);
+            box-shadow: 0 0 18px rgba(59, 130, 246, 0.18);
         }
 
         .task-item a {
@@ -380,22 +354,22 @@
             display: inline-flex;
             align-items: center;
             gap: 6px;
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             text-transform: uppercase;
             letter-spacing: 0.08em;
             padding: 4px 10px;
             border-radius: 999px;
-            background: rgba(148, 163, 184, 0.18);
-            color: var(--text-light);
+            background: rgba(148, 163, 184, 0.2);
+            color: var(--text-soft);
         }
 
-        .status-running { background: rgba(251, 191, 36, 0.18); color: #fbbf24; }
-        .status-success { background: rgba(16, 185, 129, 0.18); color: var(--success); }
-        .status-failed { background: rgba(248, 113, 113, 0.18); color: var(--danger); }
-        .status-planned { background: rgba(14, 165, 233, 0.18); color: #38bdf8; }
-        .status-paused { background: rgba(251, 146, 60, 0.18); color: #fb923c; }
+        .status-running { background: rgba(217, 119, 6, 0.12); color: var(--warning); }
+        .status-success { background: rgba(16, 185, 129, 0.12); color: var(--success); }
+        .status-failed { background: rgba(220, 38, 38, 0.12); color: var(--danger); }
+        .status-planned { background: rgba(14, 165, 233, 0.12); color: var(--accent-cyan); }
+        .status-paused { background: rgba(59, 130, 246, 0.12); color: var(--accent-blue); }
         .status-manually_overridden,
-        .status-skipped_retry { background: rgba(148, 163, 184, 0.18); color: var(--text-muted); }
+        .status-skipped_retry { background: rgba(148, 163, 184, 0.16); color: var(--text-soft); }
 
         .dag-card {
             display: flex;
@@ -406,37 +380,117 @@
         .vis-network {
             height: 420px;
             border-radius: 16px;
-            background: rgba(7, 11, 23, 0.65);
-            border: 1px solid rgba(59, 130, 246, 0.25);
-            box-shadow: inset 0 0 45px rgba(15, 23, 42, 0.6);
+            background: #f8fafc;
+            border: 1px solid rgba(148, 163, 184, 0.4);
+            box-shadow: inset 0 0 25px rgba(148, 163, 184, 0.18);
         }
 
         .node-details {
-            background: rgba(15, 23, 42, 0.7);
-            border-radius: 16px;
+            background: var(--bg-card-alt);
+            border-radius: 18px;
             padding: 20px;
-            border: 1px solid rgba(148, 163, 184, 0.15);
+            border: 1px solid rgba(148, 163, 184, 0.35);
             display: flex;
             flex-direction: column;
-            gap: 14px;
+            gap: 18px;
         }
 
         .node-details p {
             margin: 0;
-            color: var(--text-muted);
+            color: var(--text-soft);
         }
 
-        pre {
-            background: rgba(15, 23, 42, 0.85);
-            border-radius: 14px;
+        .node-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 16px;
             padding: 16px;
-            border: 1px solid rgba(148, 163, 184, 0.2);
-            color: var(--text-light);
-            max-height: 340px;
-            overflow: auto;
-            font-family: 'SFMono-Regular', 'JetBrains Mono', 'Fira Code', monospace;
+            border-radius: 14px;
+            background: rgba(191, 219, 254, 0.35);
+        }
+
+        .node-summary-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            color: var(--text-secondary);
+        }
+
+        .node-summary-item span {
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-soft);
+        }
+
+        .node-data-section {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding: 16px;
+            border-radius: 14px;
+            background: #fff;
+            border: 1px solid rgba(148, 163, 184, 0.35);
+        }
+
+        .node-data-section h4 {
+            margin: 0;
+            font-size: 1rem;
+            color: var(--text-main);
+        }
+
+        .data-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px 18px;
+        }
+
+        .data-item {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            color: var(--text-secondary);
+        }
+
+        .data-item span {
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-soft);
+        }
+
+        .data-collection {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .data-card {
+            padding: 14px;
+            border-radius: 12px;
+            border: 1px solid rgba(148, 163, 184, 0.3);
+            background: rgba(241, 245, 249, 0.6);
+        }
+
+        .data-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            color: var(--text-muted);
             font-size: 0.85rem;
-            line-height: 1.5;
+        }
+
+        .data-text {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            color: var(--text-secondary);
+            line-height: 1.55;
+        }
+
+        .data-text p {
+            margin: 0;
         }
 
         .schedule-card {
@@ -454,121 +508,167 @@
 
         .schedule-subtitle {
             margin: 6px 0 0;
-            color: var(--text-muted);
+            color: var(--text-soft);
             font-size: 0.95rem;
         }
 
-        .schedule-table-wrapper {
-            overflow-x: auto;
+        .schedule-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+
+        .schedule-item {
+            border: 1px solid rgba(148, 163, 184, 0.3);
             border-radius: 16px;
-            border: 1px solid rgba(148, 163, 184, 0.18);
+            background: linear-gradient(180deg, rgba(241, 245, 249, 0.65), rgba(255, 255, 255, 0.95));
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
         }
 
-        table {
-            width: 100%;
-            border-collapse: separate;
-            border-spacing: 0;
-            background: rgba(10, 15, 28, 0.65);
+        .schedule-top {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            align-items: center;
+            justify-content: space-between;
         }
 
-        thead tr {
-            background: rgba(30, 41, 59, 0.75);
+        .schedule-index {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
+            background: rgba(37, 99, 235, 0.12);
+            color: var(--accent-blue);
+            font-weight: 600;
+            font-size: 1rem;
         }
 
-        th, td {
-            padding: 14px;
-            text-align: left;
-            border-bottom: 1px solid rgba(148, 163, 184, 0.12);
-            vertical-align: top;
-            color: var(--text-light);
-            font-size: 0.93rem;
+        .schedule-top-group {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 14px;
         }
 
-        th:first-child,
-        td:first-child {
-            border-top-left-radius: 16px;
+        .schedule-field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            min-width: 160px;
         }
 
-        th:last-child,
-        td:last-child {
-            border-top-right-radius: 16px;
+        .schedule-field label {
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-soft);
         }
 
-        tbody tr:hover {
-            background: rgba(30, 41, 59, 0.55);
+        .schedule-body {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 18px;
+        }
+
+        .schedule-column {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
         }
 
         .inline-textarea {
             width: 100%;
-            min-height: 64px;
+            min-height: 72px;
         }
 
         .inline-textarea.small {
-            min-height: 48px;
+            min-height: 56px;
+        }
+
+        .metrics-box {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 12px;
+            padding: 16px;
+            border-radius: 14px;
+            background: rgba(219, 234, 254, 0.4);
+            border: 1px solid rgba(148, 163, 184, 0.35);
+        }
+
+        .metrics-box label {
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-soft);
+            display: block;
+            margin-bottom: 4px;
         }
 
         .metrics-input {
             width: 100%;
-            text-align: center;
         }
 
-        .content-cell {
+        .content-card {
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 12px;
+            padding: 16px;
+            border-radius: 14px;
+            background: #fff;
+            border: 1px solid rgba(148, 163, 184, 0.35);
         }
 
         .content-meta {
             display: flex;
+            flex-wrap: wrap;
             align-items: center;
             gap: 10px;
-            flex-wrap: wrap;
         }
 
         .content-placeholder {
-            padding: 12px;
-            border-radius: 14px;
-            border: 1px dashed rgba(148, 163, 184, 0.28);
-            color: var(--text-muted);
-            background: rgba(30, 41, 59, 0.45);
-        }
-
-        .content-details {
-            background: rgba(15, 23, 42, 0.65);
+            padding: 12px 14px;
             border-radius: 12px;
-            border: 1px solid rgba(59, 130, 246, 0.18);
-            padding: 10px 12px;
-        }
-
-        .content-details summary {
-            cursor: pointer;
-            color: var(--accent-cyan);
-            font-weight: 600;
-        }
-
-        .content-details[open] summary {
-            color: var(--text-main);
-        }
-
-        .content-details pre {
-            background: transparent;
-            border: none;
-            padding: 8px 0 0;
-            max-height: 220px;
+            border: 1px dashed rgba(148, 163, 184, 0.45);
+            color: var(--text-soft);
+            font-size: 0.9rem;
+            background: rgba(241, 245, 249, 0.6);
         }
 
         .content-timestamp {
-            font-size: 0.75rem;
-            color: var(--text-muted);
+            font-size: 0.8rem;
+            color: rgba(71, 85, 105, 0.9);
+        }
+
+        .content-text {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        .content-text p {
+            margin: 0;
         }
 
         .chart-wrapper {
-            margin-top: 24px;
-            background: rgba(7, 11, 23, 0.8);
+            margin-top: 26px;
+            background: var(--bg-card-alt);
             border-radius: 16px;
-            border: 1px solid rgba(148, 163, 184, 0.18);
-            padding: 18px;
-            height: 260px;
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            padding: 22px;
+            height: 280px;
+        }
+
+        .chart-wrapper canvas {
+            width: 100% !important;
+            height: 100% !important;
         }
 
         .chart-wrapper canvas {
@@ -591,21 +691,21 @@
         .modal-backdrop {
             position: fixed;
             inset: 0;
-            background: rgba(2, 6, 23, 0.78);
+            background: rgba(15, 23, 42, 0.25);
             display: none;
             align-items: center;
             justify-content: center;
             z-index: 50;
-            backdrop-filter: blur(6px);
+            backdrop-filter: blur(8px);
         }
 
         .modal-content {
-            background: rgba(15, 23, 42, 0.95);
+            background: #ffffff;
             border-radius: 18px;
             width: min(860px, 92vw);
             padding: 28px;
-            border: 1px solid rgba(59, 130, 246, 0.35);
-            box-shadow: 0 25px 60px rgba(2, 6, 23, 0.65);
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            box-shadow: 0 25px 60px rgba(15, 23, 42, 0.18);
         }
 
         .modal-actions {
@@ -1162,6 +1262,141 @@
             return JSON.stringify(originalInput, null, 2);
         }
 
+        function normalizeLabel(label) {
+            return label
+                .replace(/([A-Z])/g, ' $1')
+                .replace(/[_\-]+/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .replace(/^./, char => char.toUpperCase());
+        }
+
+        function hasMeaningfulData(value) {
+            if (value === null || value === undefined) return false;
+            if (typeof value === 'string') return value.trim().length > 0;
+            if (typeof value === 'number' || typeof value === 'boolean') return true;
+            if (Array.isArray(value)) {
+                return value.some(item => hasMeaningfulData(item));
+            }
+            if (typeof value === 'object') {
+                return Object.values(value).some(item => hasMeaningfulData(item));
+            }
+            return false;
+        }
+
+        function attemptParseJson(text) {
+            if (typeof text !== 'string') return null;
+            try {
+                const parsed = JSON.parse(text);
+                if (typeof parsed === 'object') {
+                    return parsed;
+                }
+                return parsed;
+            } catch (error) {
+                return null;
+            }
+        }
+
+        function renderTextBlock(text) {
+            if (text === null || text === undefined) {
+                return '<div class="data-text"><p>—</p></div>';
+            }
+            const normalized = String(text);
+            const paragraphs = normalized
+                .split(/\n+/)
+                .map(part => part.trim())
+                .filter(Boolean)
+                .map(part => `<p>${escapeHtml(part)}</p>`)
+                .join('');
+            return `<div class="data-text">${paragraphs || '<p>—</p>'}</div>`;
+        }
+
+        function renderStructuredContent(value, depth = 0) {
+            if (!hasMeaningfulData(value)) {
+                return '<div class="data-text"><p>—</p></div>';
+            }
+
+            if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+                return renderTextBlock(value);
+            }
+
+            if (Array.isArray(value)) {
+                if (!value.length) {
+                    return '<div class="data-text"><p>—</p></div>';
+                }
+
+                if (value.every(item => typeof item !== 'object' || item === null)) {
+                    return renderTextBlock(value.join('\n'));
+                }
+
+                return `<div class="data-collection">${value.map((item, index) => `
+                    <div class="data-card">
+                        <div class="data-card-header">Элемент ${index + 1}</div>
+                        ${renderStructuredContent(item, depth + 1)}
+                    </div>
+                `).join('')}</div>`;
+            }
+
+            if (typeof value === 'object') {
+                const entries = Object.entries(value).filter(([, val]) => hasMeaningfulData(val));
+                if (!entries.length) {
+                    return '<div class="data-text"><p>—</p></div>';
+                }
+
+                return `<div class="data-grid">${entries.map(([key, val]) => `
+                    <div class="data-item">
+                        <span>${escapeHtml(normalizeLabel(key))}</span>
+                        ${renderStructuredContent(val, depth + 1)}
+                    </div>
+                `).join('')}</div>`;
+            }
+
+            return '<div class="data-text"><p>—</p></div>';
+        }
+
+        function buildNodeDataSection(title, data) {
+            if (!hasMeaningfulData(data)) {
+                return '';
+            }
+            return `
+                <div class="node-data-section">
+                    <h4>${escapeHtml(title)}</h4>
+                    ${renderStructuredContent(data)}
+                </div>
+            `;
+        }
+
+        function buildContentText(content) {
+            if (!hasMeaningfulData(content)) {
+                return '';
+            }
+
+            if (typeof content === 'string') {
+                const paragraphs = content
+                    .split(/\n+/)
+                    .map(part => part.trim())
+                    .filter(Boolean)
+                    .map(part => `<p>${escapeHtml(part)}</p>`)
+                    .join('');
+                return `<div class="content-text">${paragraphs}</div>`;
+            }
+
+            if (Array.isArray(content)) {
+                return `<div class="content-text">${content
+                    .map(entry => `<p>${escapeHtml(typeof entry === 'string' ? entry : JSON.stringify(entry, null, 2))}</p>`)
+                    .join('')}</div>`;
+            }
+
+            if (typeof content === 'object') {
+                return `<div class="content-text">${Object.entries(content)
+                    .filter(([, value]) => hasMeaningfulData(value))
+                    .map(([key, value]) => `<p><strong>${escapeHtml(normalizeLabel(key))}:</strong> ${escapeHtml(typeof value === 'string' ? value : JSON.stringify(value, null, 2))}</p>`)
+                    .join('')}</div>`;
+            }
+
+            return `<div class="content-text"><p>${escapeHtml(String(content))}</p></div>`;
+        }
+
         function showNodeDetails(node) {
             if (!node) return;
             const statusClass = `status-${(node.status || '').toLowerCase()}`;
@@ -1169,41 +1404,80 @@
             const initialPrompt = getInitialPrompt(node);
             const friendlyName = AGENT_FRIENDLY_NAMES[node.agent_type] || node.agent_type;
 
-            let html = `
-                <h3>${friendlyName}</h3>
-                <p><strong>Узел:</strong> ${escapeHtml(node.id)} · <span class="status-pill ${statusClass}">${escapeHtml(node.status)}</span></p>
-                <p><strong>Стоимость:</strong> $${cost.toFixed(4)}</p>
-                <p><strong>Зависимости:</strong> ${(node.dependsOn || []).join(', ') || '—'}</p>
-                <div>
-                    <h4>Промпт для агента</h4>
-                    <pre>${escapeHtml(initialPrompt)}</pre>
+            const dependencies = (node.dependsOn || []).filter(Boolean);
+            const durationMs = Number.isFinite(node.duration_ms) ? node.duration_ms : Number.isFinite(node.duration) ? node.duration : null;
+            const retries = Number.isFinite(node.retries) ? node.retries : null;
+
+            const summaryItems = [
+                { label: 'Узел', value: escapeHtml(node.id) },
+                { label: 'Статус', raw: `<span class="status-pill ${statusClass}">${escapeHtml(node.status || '—')}</span>` },
+                { label: 'Стоимость', value: `$${cost.toFixed(4)}` },
+                { label: 'Зависимости', value: dependencies.length ? escapeHtml(dependencies.join(', ')) : '—' }
+            ];
+
+            if (durationMs) {
+                const seconds = durationMs / 1000;
+                const formatted = seconds >= 60 ? `${(seconds / 60).toFixed(1)} мин` : `${seconds.toFixed(1)} сек`;
+                summaryItems.push({ label: 'Длительность', value: formatted });
+            }
+
+            if (retries) {
+                summaryItems.push({ label: 'Повторов', value: retries });
+            }
+
+            const summaryHtml = summaryItems.map(item => `
+                <div class="node-summary-item">
+                    <span>${escapeHtml(item.label)}</span>
+                    ${item.raw ?? `<strong>${typeof item.value === 'string' ? item.value : escapeHtml(String(item.value ?? '—'))}</strong>`}
                 </div>
+            `).join('');
+
+            let html = `
+                <h3>${escapeHtml(friendlyName)}</h3>
+                <div class="node-summary">${summaryHtml}</div>
             `;
+
+            const parsedInitial = typeof initialPrompt === 'string' ? attemptParseJson(initialPrompt) ?? initialPrompt : initialPrompt;
+            html += buildNodeDataSection('Промпт для агента', parsedInitial);
 
             const finalPrompt = node.result_data?.meta?.prompt || node.result_data?.meta?.promptOverride;
             if (finalPrompt) {
-                html += `<div><h4>Финальный промпт для LLM</h4><pre>${escapeHtml(finalPrompt)}</pre></div>`;
+                const parsedFinal = attemptParseJson(finalPrompt) ?? finalPrompt;
+                html += buildNodeDataSection('Финальный промпт', parsedFinal);
             }
 
             if (node.agent_type === 'RetryAgent' && node.result_data?.internalPrompt) {
-                html += `<div><h4>Внутренний промпт (коррекция)</h4><pre>${escapeHtml(node.result_data.internalPrompt)}</pre></div>`;
+                const retryPrompt = attemptParseJson(node.result_data.internalPrompt) ?? node.result_data.internalPrompt;
+                html += buildNodeDataSection('Внутренний промпт коррекции', retryPrompt);
             }
 
             const generatedContent = node.result_data?.finalImagePrompt || node.result_data?.final_video_prompt;
             if (generatedContent) {
-                html += `<div><h4>Итоговый творческий план</h4><pre>${escapeHtml(generatedContent)}</pre></div>`;
+                html += buildNodeDataSection('Итоговый творческий план', generatedContent);
             }
 
             if (node.agent_type === 'StrategyAgent' && Array.isArray(node.result_data?.schedule)) {
-                html += `<div><h4>План публикаций</h4><pre>${escapeHtml(JSON.stringify(node.result_data.schedule, null, 2))}</pre></div>`;
+                html += buildNodeDataSection('План публикаций', node.result_data.schedule);
             }
 
-            if (node.result_data) {
-                html += `<div><h4>Полный результат</h4><pre>${escapeHtml(JSON.stringify(node.result_data, null, 2))}</pre></div>`;
+            const resultData = node.result_data ? { ...node.result_data } : null;
+            if (resultData && Array.isArray(resultData.schedule)) {
+                delete resultData.schedule;
+            }
+
+            if (resultData?.meta) {
+                resultData.meta = { ...resultData.meta };
+                delete resultData.meta.prompt;
+                delete resultData.meta.promptOverride;
+            }
+
+            if (resultData) {
+                html += buildNodeDataSection('Полный результат', resultData);
             }
 
             if (node.status === 'FAILED') {
-                html += `<p><strong class="status-failed">Узел завершился с ошибкой.</strong> ${escapeHtml(node.result_data?.reason || 'Проверьте лог.')}</p>`;
+                const errorMessage = node.result_data?.reason || node.result_data?.error || 'Проверьте лог выполнения узла.';
+                html += buildNodeDataSection('Ошибка', errorMessage);
                 html += `<a href="/api/logs/${node.taskId}" target="_blank"><button class="secondary">Открыть лог задачи</button></a>`;
                 if (node.agent_type?.includes('GuardAgent')) {
                     html += `<button style="margin-left: 12px;" onclick="openPromptModal('${node.id}')">✏️ Редактировать промпт</button>`;
@@ -1229,12 +1503,12 @@
             const hasHumanGate = (nodes || []).some(node => node.agent_type === 'HumanGateAgent');
             const strategyReady = (nodes || []).some(node => node.agent_type === 'StrategyAgent' && node.status === 'SUCCESS');
             const humanGateCompleted = (nodes || []).some(node => node.agent_type === 'HumanGateAgent' && node.status === 'SUCCESS');
-            const generatorEnabled = !awaitingHumanInput;
+            const generatorEnabled = awaitingHumanInput || humanGateCompleted || !hasHumanGate || strategyReady;
             const planEditable = awaitingHumanInput || (!hasHumanGate || humanGateCompleted);
+            const metricsEditable = humanGateCompleted || !hasHumanGate;
 
             const planDisabledAttr = planEditable ? '' : 'disabled';
-            const metricsDisabledAttr = generatorEnabled ? '' : 'disabled';
-            const generatorDisabledAttr = generatorEnabled ? '' : 'disabled';
+            const metricsDisabledAttr = metricsEditable ? '' : 'disabled';
 
             const statusNotice = awaitingHumanInput
                 ? 'Расписание ожидает подтверждения. Можно корректировать план перед запуском.'
@@ -1254,23 +1528,7 @@
                     </div>
                     ${awaitingHumanInput ? '<span class="status-pill status-paused">Требуется одобрение</span>' : ''}
                 </div>
-                <div class="schedule-table-wrapper">
-                    <table class="schedule-table">
-                        <thead>
-                            <tr>
-                                <th>#</th>
-                                <th>Дата</th>
-                                <th>Тип</th>
-                                <th>Канал</th>
-                                <th>Тема</th>
-                                <th>Цель</th>
-                                <th>Заметки</th>
-                                <th>Контент / Статус</th>
-                                <th>Просмотры</th>
-                                <th>Лайки</th>
-                            </tr>
-                        </thead>
-                        <tbody>
+                <div class="schedule-grid">
             `;
 
             currentSchedule.forEach((item, index) => {
@@ -1286,9 +1544,7 @@
                 const statusInfo = getScheduleStatusInfo(item.status);
                 const contentData = extractContentStrings(item);
                 const generatedAt = formatGeneratedAt(item.last_generated_at);
-                const errorMessage = item.generation_error
-                    ? `<div class="content-placeholder" style="border-color: rgba(248, 113, 113, 0.45); color: #fca5a5;">Ошибка: ${escapeHtml(item.generation_error)}</div>`
-                    : '';
+                const errorText = item.generation_error ? escapeHtml(item.generation_error) : '';
 
                 const safeDate = escapeHtml(dateValue);
                 const safeType = escapeHtml(typeValue);
@@ -1303,56 +1559,89 @@
                 const nodeLabel = safeNodeId ? `<span class="content-timestamp">ID узла: ${safeNodeId}</span>` : '';
 
                 const contentFull = contentData.full;
-                const contentPreview = contentData.preview;
-                const contentPreviewSafe = escapeHtml(contentPreview);
-                const contentFullSafe = escapeHtml(contentFull);
-
-                const dateCell = `<input type="date" value="${safeDate}" data-index="${index}" data-field="date" onchange="updateScheduleStat(this, '${taskId}')" ${planDisabledAttr}>`;
-                const typeCell = `<input type="text" value="${safeType}" data-index="${index}" data-field="type" onchange="updateScheduleStat(this, '${taskId}')" ${planDisabledAttr}>`;
-                const channelCell = `<input type="text" value="${safeChannel}" data-index="${index}" data-field="channel" onchange="updateScheduleStat(this, '${taskId}')" ${planDisabledAttr}>`;
-                const topicCell = `<textarea class="inline-textarea" data-index="${index}" data-field="topic" onchange="updateScheduleStat(this, '${taskId}')" ${planDisabledAttr}>${safeTopic}</textarea>`;
-                const objectiveCell = `<textarea class="inline-textarea small" data-index="${index}" data-field="objective" onchange="updateScheduleStat(this, '${taskId}')" ${planDisabledAttr}>${safeObjective}</textarea>`;
-                const notesCell = `<textarea class="inline-textarea small" data-index="${index}" data-field="notes" onchange="updateScheduleStat(this, '${taskId}')" ${planDisabledAttr}>${safeNotes}</textarea>`;
+                const dateField = `<input type="date" value="${safeDate}" data-index="${index}" data-field="date" onchange="updateScheduleStat(this, '${taskId}')" ${planDisabledAttr}>`;
+                const typeField = `<input type="text" value="${safeType}" data-index="${index}" data-field="type" onchange="updateScheduleStat(this, '${taskId}')" ${planDisabledAttr}>`;
+                const channelField = `<input type="text" value="${safeChannel}" data-index="${index}" data-field="channel" onchange="updateScheduleStat(this, '${taskId}')" ${planDisabledAttr}>`;
+                const topicField = `<textarea class="inline-textarea" data-index="${index}" data-field="topic" onchange="updateScheduleStat(this, '${taskId}')" ${planDisabledAttr}>${safeTopic}</textarea>`;
+                const objectiveField = `<textarea class="inline-textarea small" data-index="${index}" data-field="objective" onchange="updateScheduleStat(this, '${taskId}')" ${planDisabledAttr}>${safeObjective}</textarea>`;
+                const notesField = `<textarea class="inline-textarea small" data-index="${index}" data-field="notes" onchange="updateScheduleStat(this, '${taskId}')" ${planDisabledAttr}>${safeNotes}</textarea>`;
 
                 const viewsInput = `<input type="number" min="0" class="metrics-input" value="${viewsValue}" data-index="${index}" data-field="views" onchange="updateScheduleStat(this, '${taskId}')" ${metricsDisabledAttr}>`;
                 const likesInput = `<input type="number" min="0" class="metrics-input" value="${likesValue}" data-index="${index}" data-field="likes" onchange="updateScheduleStat(this, '${taskId}')" ${metricsDisabledAttr}>`;
 
-                const detailsBlock = contentData.hasContent
-                    ? `<details class="content-details"><summary>${contentPreviewSafe}</summary><pre>${contentFullSafe}</pre></details>`
-                    : `<div class="content-placeholder">Контент пока не сгенерирован</div>`;
+                const isGenerating = ['CONTENT_GENERATING', 'GENERATING', 'IN_PROGRESS'].includes((item.status || '').toUpperCase());
+                const generatorDisabledAttr = generatorEnabled && !isGenerating ? '' : 'disabled';
 
-                const contentCell = `
-                    <div class="content-cell">
-                        <div class="content-meta">
-                            <span class="status-pill ${statusInfo.className}">${statusInfo.label}</span>
-                            ${generatedLabel}
-                            ${nodeLabel}
-                            <button class="secondary" data-action="generate-content" data-index="${index}" ${generatorDisabledAttr}>⚙️ Сгенерировать</button>
-                        </div>
-                        ${detailsBlock}
-                        ${errorMessage}
-                    </div>
-                `;
+                const contentBlock = contentData.hasContent
+                    ? buildContentText(contentFull)
+                    : '<div class="content-placeholder">Контент пока не сгенерирован</div>';
+
+                const errorBlock = errorText
+                    ? `<div class="content-placeholder" style="border-color: rgba(220, 38, 38, 0.45); background: rgba(254, 226, 226, 0.65); color: var(--danger);">Ошибка: ${errorText}</div>`
+                    : '';
 
                 html += `
-                        <tr>
-                            <td>${index + 1}</td>
-                            <td>${dateCell}</td>
-                            <td>${typeCell}</td>
-                            <td>${channelCell}</td>
-                            <td>${topicCell}</td>
-                            <td>${objectiveCell}</td>
-                            <td>${notesCell}</td>
-                            <td>${contentCell}</td>
-                            <td>${viewsInput}</td>
-                            <td>${likesInput}</td>
-                        </tr>
+                    <div class="schedule-item">
+                        <div class="schedule-top">
+                            <div class="schedule-top-group">
+                                <div class="schedule-index">${index + 1}</div>
+                                <div class="schedule-field">
+                                    <label>Дата</label>
+                                    ${dateField}
+                                </div>
+                                <div class="schedule-field">
+                                    <label>Тип</label>
+                                    ${typeField}
+                                </div>
+                                <div class="schedule-field">
+                                    <label>Каналы</label>
+                                    ${channelField}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="schedule-body">
+                            <div class="schedule-column">
+                                <div class="schedule-field">
+                                    <label>Тема / сообщение</label>
+                                    ${topicField}
+                                </div>
+                                <div class="schedule-field">
+                                    <label>Цель</label>
+                                    ${objectiveField}
+                                </div>
+                                <div class="schedule-field">
+                                    <label>Заметки</label>
+                                    ${notesField}
+                                </div>
+                            </div>
+                            <div class="schedule-column">
+                                <div class="content-card">
+                                    <div class="content-meta">
+                                        <span class="status-pill ${statusInfo.className}">${statusInfo.label}</span>
+                                        ${generatedLabel}
+                                        ${nodeLabel}
+                                        <button class="secondary" data-action="generate-content" data-index="${index}" ${generatorDisabledAttr}>⚙️ Сгенерировать</button>
+                                    </div>
+                                    ${contentBlock}
+                                    ${errorBlock}
+                                </div>
+                                <div class="metrics-box">
+                                    <div>
+                                        <label>Просмотры</label>
+                                        ${viewsInput}
+                                    </div>
+                                    <div>
+                                        <label>Лайки</label>
+                                        ${likesInput}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 `;
             });
 
             html += `
-                        </tbody>
-                    </table>
                 </div>
                 <div class="chart-wrapper">
                     <canvas id="scheduleChart"></canvas>
