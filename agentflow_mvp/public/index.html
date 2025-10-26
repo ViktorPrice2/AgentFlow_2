@@ -2,168 +2,748 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>AgentFlow 2.0: Интеллектуальная Панель Управления</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgentFlow 2.0 — Панель Управления</title>
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.min.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f7f9; }
-        .container { max-width: 1600px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        h1 { color: #333; border-bottom: 2px solid #eee; padding-bottom: 10px; }
-        .status-running { background-color: #ffe0b2; }
-        .status-success { background-color: #c8e6c9; }
-        .status-failed { background-color: #ffcdd2; }
-        .status-planned { background-color: #e0f7fa; }
-        .status-paused { background-color: #fff59d; }
-        .status-manually_overridden, .status-skipped_retry { background-color: #e6e6e6; }
-        .vis-network { height: 400px; border: 1px solid lightgray; }
-        .flex-container { display: flex; gap: 20px; margin-top: 20px; flex-wrap: wrap; }
-        .side-panel { flex: 1; min-width: 280px; }
-        .main-content { flex: 2; min-width: 480px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; table-layout: fixed; }
-        .schedule-table { table-layout: fixed; min-width: 100%; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; word-break: break-word; white-space: normal; vertical-align: top; box-sizing: border-box; }
-        ul { list-style: none; padding: 0; }
-        li.task-item { margin-bottom: 8px; padding: 6px 10px; border-radius: 4px; background: #f8f9fa; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
-        li.task-item.active { border: 1px solid #007bff; background: #e3f2fd; }
-        li.task-item span { margin-right: 8px; padding: 2px 6px; border-radius: 4px; font-size: 0.85rem; text-transform: uppercase; }
-        li.task-item button { margin-left: 10px; padding: 4px 8px; font-size: 0.8rem; }
-        button { cursor: pointer; padding: 8px 12px; border: none; border-radius: 4px; background: #1976d2; color: white; } 
-        button.secondary { background: #6c757d; } 
-        button:disabled { opacity: 0.5; cursor: not-allowed; } 
-        textarea { font-family: monospace; } 
-        .task-form input, .task-form select { width: 100%; padding: 8px; margin-bottom: 10px; border-radius: 4px; border: 1px solid #ccc; } 
-        .task-form button { width: 100%; } 
-        .media-options { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; } 
-        .checkbox { display: flex; align-items: center; gap: 6px; font-size: 0.95rem; color: #444; } 
-        .checkbox input { width: auto; accent-color: #1976d2; }
-        .format-section { margin-top: 12px; background: #f9fbfd; border: 1px solid #e0e7ef; padding: 12px; border-radius: 6px; }
-        .format-section h3 { margin-top: 0; font-size: 1rem; color: #2a4668; }
-        .format-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 12px; }
-        .format-field label { display: flex; flex-direction: column; gap: 4px; font-size: 0.9rem; color: #333; }
-        .format-field input { padding: 6px 8px; border-radius: 4px; border: 1px solid #ccd4dd; }
-        .format-notes { width: 100%; min-height: 70px; padding: 8px; border: 1px solid #ccd4dd; border-radius: 4px; resize: vertical; font-family: inherit; }
-        .status-pill { font-weight: bold; padding: 2px 6px; border-radius: 4px; color: #333; }
-        pre { background: #f0f3f5; padding: 10px; border-radius: 4px; white-space: pre-wrap; word-break: break-word; }
-        .modal-backdrop { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10; }
-        .modal-content { background: white; margin: 5% auto; padding: 20px; width: 80%; max-width: 720px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
-        .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 10px; }
-        .schedule-header { display: flex; justify-content: space-between; align-items: center; margin-top: 40px; }
-        .schedule-table-wrapper { overflow-x: auto; margin-top: 10px; }
-        .schedule-table th, .schedule-table td { vertical-align: top; }
-        .schedule-table th:nth-child(1), .schedule-table td:nth-child(1) { width: 4%; }
-        .schedule-table th:nth-child(2), .schedule-table td:nth-child(2) { width: 11%; }
-        .schedule-table th:nth-child(3), .schedule-table td:nth-child(3) { width: 10%; }
-        .schedule-table th:nth-child(4), .schedule-table td:nth-child(4) { width: 10%; }
-        .schedule-table th:nth-child(5), .schedule-table td:nth-child(5) { width: 15%; }
-        .schedule-table th:nth-child(6), .schedule-table td:nth-child(6) { width: 13%; }
-        .schedule-table th:nth-child(7), .schedule-table td:nth-child(7) { width: 12%; }
-        .schedule-table th:nth-child(8), .schedule-table td:nth-child(8) { width: 18%; } /* Уменьшено для освобождения места */
-        .schedule-table th:nth-child(9), .schedule-table td:nth-child(9) { width: 7%; min-width: 70px; } /* Увеличено и добавлено min-width */
-        .schedule-table th:nth-child(10), .schedule-table td:nth-child(10) { width: 7%; min-width: 70px; } /* Увеличено и добавлено min-width */
-        .schedule-table input { width: 100%; max-width: 100%; box-sizing: border-box; padding: 6px; border-radius: 4px; border: 1px solid #ccd4dd; }
-        .schedule-table textarea { width: 100%; max-width: 100%; min-height: 90px; resize: vertical; box-sizing: border-box; padding: 6px; border-radius: 4px; border: 1px solid #ccd4dd; font-family: inherit; }
-        .schedule-table input[type="number"] { min-width: 70px; }
-        .content-cell { display: flex; flex-direction: column; gap: 6px; }
-        .content-meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-        .content-placeholder { padding: 8px; border: 1px dashed #cfd8dc; border-radius: 4px; color: #607d8b; background: #f7fafc; }
-        .content-details { background: #f7f9fb; border: 1px solid #dde5ee; border-radius: 4px; padding: 6px 8px; max-height: 180px; overflow: auto; }
-        .content-details summary { cursor: pointer; font-weight: 600; color: #1976d2; outline: none; }
-        .content-details[open] summary { color: #0d47a1; }
-        .content-details pre { margin-top: 6px; background: transparent; padding: 0; white-space: pre-wrap; word-break: break-word; }
-        .content-timestamp { font-size: 0.75rem; color: #607d8b; }
-        .tag-pill { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.02em; background: #e3f2fd; color: #0d47a1; }
-        .tag-pill.status-running { background: #ffe0b2; color: #bf360c; }
-        .tag-pill.status-success { background: #c8e6c9; color: #1b5e20; }
-        .tag-pill.status-failed { background: #ffcdd2; color: #b71c1c; }
-        .tag-pill.status-planned { background: #e0f7fa; color: #006064; }
-        .schedule-value { display: block; white-space: pre-wrap; word-break: break-word; line-height: 1.35; }
-        .schedule-table textarea.inline-textarea { min-height: 60px; resize: vertical; }
-        .schedule-table textarea.inline-textarea.small { min-height: 40px; }
-        .schedule-table input.metrics-input { width: 100%; text-align: center; font-size: 0.9em; padding: 4px; } /* Уменьшен шрифт и отступы */
-        .schedule-table .field-stack { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
-        .chart-wrapper { margin-top: 20px; height: 240px; }
-        .chart-wrapper canvas { width: 100% !important; height: 100% !important; }
-        @media (max-width: 900px) {
-            .flex-container { flex-direction: column; }
+        :root {
+            --bg-dark: #05060f;
+            --bg-surface: rgba(20, 24, 38, 0.88);
+            --bg-card: rgba(23, 27, 42, 0.95);
+            --bg-card-alt: rgba(18, 21, 34, 0.92);
+            --bg-input: rgba(30, 36, 54, 0.9);
+            --border-color: rgba(68, 78, 107, 0.45);
+            --accent-blue: #3b82f6;
+            --accent-cyan: #22d3ee;
+            --accent-purple: #a855f7;
+            --text-main: #f9fafb;
+            --text-light: #cbd5f5;
+            --text-muted: #9ca3af;
+            --success: #34d399;
+            --warning: #fbbf24;
+            --danger: #f87171;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 32px;
+            background: radial-gradient(circle at 20% 20%, rgba(59, 130, 246, 0.15), transparent 45%),
+                        radial-gradient(circle at 80% 0%, rgba(168, 85, 247, 0.18), transparent 55%),
+                        radial-gradient(circle at 50% 80%, rgba(14, 165, 233, 0.16), transparent 60%),
+                        var(--bg-dark);
+            color: var(--text-light);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(14, 116, 144, 0.05));
+            mix-blend-mode: screen;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 28px;
+        }
+
+        .card {
+            position: relative;
+            background: var(--bg-card);
+            border-radius: 20px;
+            padding: 28px;
+            border: 1px solid rgba(148, 163, 184, 0.12);
+            box-shadow: 0 25px 55px rgba(8, 15, 35, 0.55);
+            overflow: hidden;
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at top left, rgba(59, 130, 246, 0.16), transparent 45%),
+                        radial-gradient(circle at bottom right, rgba(22, 163, 74, 0.12), transparent 55%);
+            opacity: 0.8;
+            z-index: 0;
+        }
+
+        .card > * {
+            position: relative;
+            z-index: 1;
+        }
+
+        .page-hero {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 24px;
+            align-items: center;
+        }
+
+        .page-title {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 2.4rem;
+            color: var(--text-main);
+            font-weight: 700;
+            letter-spacing: -0.01em;
+        }
+
+        .page-subtitle {
+            margin: 0;
+            color: var(--text-muted);
+            font-size: 1.05rem;
+            line-height: 1.5;
+        }
+
+        .hero-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .meta-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 999px;
+            background: rgba(59, 130, 246, 0.16);
+            color: var(--text-main);
+            font-size: 0.9rem;
+            letter-spacing: 0.02em;
+        }
+
+        .meta-chip svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        .hero-illustration {
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .orbital {
+            width: 180px;
+            height: 180px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.75), rgba(168, 85, 247, 0.65));
+            box-shadow: 0 0 45px rgba(59, 130, 246, 0.35);
+            position: relative;
+            overflow: hidden;
+            animation: float 9s ease-in-out infinite;
+        }
+
+        .orbital::before,
+        .orbital::after {
+            content: '';
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(15, 23, 42, 0.35);
+            animation: pulseGlow 12s linear infinite;
+        }
+
+        .orbital::before {
+            width: 120px;
+            height: 120px;
+            top: 18px;
+            left: 18px;
+        }
+
+        .orbital::after {
+            width: 60px;
+            height: 60px;
+            bottom: 22px;
+            right: 28px;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-12px) rotate(4deg); }
+        }
+
+        @keyframes pulseGlow {
+            0%, 100% { transform: scale(1); opacity: 0.4; }
+            50% { transform: scale(1.12); opacity: 0.7; }
+        }
+
+        .task-form {
+            background: var(--bg-card-alt);
+        }
+
+        .task-form h2,
+        .card h2,
+        .card h3 {
+            margin-top: 0;
+            color: var(--text-main);
+            font-weight: 600;
+            letter-spacing: -0.01em;
+        }
+
+        .task-form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 18px;
+            margin-top: 18px;
+        }
+
+        label.input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }
+
+        input[type="text"],
+        input[type="date"],
+        input[type="number"],
+        select,
+        textarea {
+            font-family: inherit;
+            background: var(--bg-input);
+            color: var(--text-main);
+            border: 1px solid rgba(148, 163, 184, 0.25);
+            border-radius: 12px;
+            padding: 12px 14px;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        textarea {
+            resize: vertical;
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus {
+            outline: none;
+            border-color: rgba(96, 165, 250, 0.95);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+        }
+
+        .media-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 14px;
+            margin: 18px 0 12px;
+        }
+
+        .checkbox {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(59, 130, 246, 0.08);
+            padding: 10px 14px;
+            border-radius: 12px;
+            border: 1px solid rgba(59, 130, 246, 0.16);
+            font-size: 0.95rem;
+            color: var(--text-light);
+        }
+
+        .checkbox span {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .checkbox input {
+            accent-color: var(--accent-blue);
+            width: 18px;
+            height: 18px;
+        }
+
+        .format-section {
+            margin-top: 22px;
+            padding: 18px;
+            border-radius: 14px;
+            background: rgba(30, 41, 59, 0.45);
+            border: 1px solid rgba(100, 116, 139, 0.2);
+        }
+
+        .format-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            margin-top: 14px;
+        }
+
+        .format-notes {
+            width: 100%;
+            min-height: 80px;
+        }
+
+        button {
+            cursor: pointer;
+            font-family: inherit;
+            font-weight: 600;
+            border: none;
+            border-radius: 14px;
+            padding: 12px 20px;
+            background: linear-gradient(135deg, var(--accent-blue), #1d4ed8);
+            color: white;
+            letter-spacing: 0.02em;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+        }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 15px 35px rgba(37, 99, 235, 0.35);
+            background: linear-gradient(135deg, #60a5fa, #1e40af);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        button.secondary {
+            background: rgba(148, 163, 184, 0.18);
+            color: var(--text-light);
+        }
+
+        button.secondary:hover:not(:disabled) {
+            background: rgba(148, 163, 184, 0.28);
+            box-shadow: none;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: minmax(280px, 360px) 1fr;
+            gap: 24px;
+        }
+
+        .task-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+
+        .task-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 14px 16px;
+            border-radius: 14px;
+            background: rgba(30, 41, 59, 0.55);
+            border: 1px solid rgba(148, 163, 184, 0.16);
+            transition: border-color 0.2s ease, transform 0.2s ease, background 0.2s ease;
+        }
+
+        .task-item:hover {
+            border-color: rgba(59, 130, 246, 0.45);
+            background: rgba(30, 41, 59, 0.75);
+            transform: translateX(2px);
+        }
+
+        .task-item.active {
+            border-color: rgba(59, 130, 246, 0.85);
+            background: rgba(30, 64, 175, 0.35);
+            box-shadow: 0 0 25px rgba(59, 130, 246, 0.25);
+        }
+
+        .task-item a {
+            flex: 1;
+            color: var(--text-main);
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: rgba(148, 163, 184, 0.18);
+            color: var(--text-light);
+        }
+
+        .status-running { background: rgba(251, 191, 36, 0.18); color: #fbbf24; }
+        .status-success { background: rgba(16, 185, 129, 0.18); color: var(--success); }
+        .status-failed { background: rgba(248, 113, 113, 0.18); color: var(--danger); }
+        .status-planned { background: rgba(14, 165, 233, 0.18); color: #38bdf8; }
+        .status-paused { background: rgba(251, 146, 60, 0.18); color: #fb923c; }
+        .status-manually_overridden,
+        .status-skipped_retry { background: rgba(148, 163, 184, 0.18); color: var(--text-muted); }
+
+        .dag-card {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+
+        .vis-network {
+            height: 420px;
+            border-radius: 16px;
+            background: rgba(7, 11, 23, 0.65);
+            border: 1px solid rgba(59, 130, 246, 0.25);
+            box-shadow: inset 0 0 45px rgba(15, 23, 42, 0.6);
+        }
+
+        .node-details {
+            background: rgba(15, 23, 42, 0.7);
+            border-radius: 16px;
+            padding: 20px;
+            border: 1px solid rgba(148, 163, 184, 0.15);
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .node-details p {
+            margin: 0;
+            color: var(--text-muted);
+        }
+
+        pre {
+            background: rgba(15, 23, 42, 0.85);
+            border-radius: 14px;
+            padding: 16px;
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            color: var(--text-light);
+            max-height: 340px;
+            overflow: auto;
+            font-family: 'SFMono-Regular', 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.85rem;
+            line-height: 1.5;
+        }
+
+        .schedule-card {
+            position: relative;
+        }
+
+        .schedule-header {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 18px;
+            margin-bottom: 16px;
+        }
+
+        .schedule-subtitle {
+            margin: 6px 0 0;
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }
+
+        .schedule-table-wrapper {
+            overflow-x: auto;
+            border-radius: 16px;
+            border: 1px solid rgba(148, 163, 184, 0.18);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            background: rgba(10, 15, 28, 0.65);
+        }
+
+        thead tr {
+            background: rgba(30, 41, 59, 0.75);
+        }
+
+        th, td {
+            padding: 14px;
+            text-align: left;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+            vertical-align: top;
+            color: var(--text-light);
+            font-size: 0.93rem;
+        }
+
+        th:first-child,
+        td:first-child {
+            border-top-left-radius: 16px;
+        }
+
+        th:last-child,
+        td:last-child {
+            border-top-right-radius: 16px;
+        }
+
+        tbody tr:hover {
+            background: rgba(30, 41, 59, 0.55);
+        }
+
+        .inline-textarea {
+            width: 100%;
+            min-height: 64px;
+        }
+
+        .inline-textarea.small {
+            min-height: 48px;
+        }
+
+        .metrics-input {
+            width: 100%;
+            text-align: center;
+        }
+
+        .content-cell {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .content-meta {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .content-placeholder {
+            padding: 12px;
+            border-radius: 14px;
+            border: 1px dashed rgba(148, 163, 184, 0.28);
+            color: var(--text-muted);
+            background: rgba(30, 41, 59, 0.45);
+        }
+
+        .content-details {
+            background: rgba(15, 23, 42, 0.65);
+            border-radius: 12px;
+            border: 1px solid rgba(59, 130, 246, 0.18);
+            padding: 10px 12px;
+        }
+
+        .content-details summary {
+            cursor: pointer;
+            color: var(--accent-cyan);
+            font-weight: 600;
+        }
+
+        .content-details[open] summary {
+            color: var(--text-main);
+        }
+
+        .content-details pre {
+            background: transparent;
+            border: none;
+            padding: 8px 0 0;
+            max-height: 220px;
+        }
+
+        .content-timestamp {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .chart-wrapper {
+            margin-top: 24px;
+            background: rgba(7, 11, 23, 0.8);
+            border-radius: 16px;
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            padding: 18px;
+            height: 260px;
+        }
+
+        .chart-wrapper canvas {
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        .approve-btn {
+            margin-top: 22px;
+            background: linear-gradient(135deg, var(--success), #16a34a);
+            box-shadow: 0 20px 45px rgba(16, 185, 129, 0.25);
+            animation: pulseButton 2.6s ease-in-out infinite;
+        }
+
+        @keyframes pulseButton {
+            0%, 100% { transform: translateY(0); box-shadow: 0 20px 45px rgba(16, 185, 129, 0.2); }
+            50% { transform: translateY(-2px); box-shadow: 0 26px 55px rgba(16, 185, 129, 0.35); }
+        }
+
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(2, 6, 23, 0.78);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 50;
+            backdrop-filter: blur(6px);
+        }
+
+        .modal-content {
+            background: rgba(15, 23, 42, 0.95);
+            border-radius: 18px;
+            width: min(860px, 92vw);
+            padding: 28px;
+            border: 1px solid rgba(59, 130, 246, 0.35);
+            box-shadow: 0 25px 60px rgba(2, 6, 23, 0.65);
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            margin-top: 18px;
+        }
+
+        .modal-content h3 {
+            margin-top: 0;
+            color: var(--text-main);
+        }
+
+        @media (max-width: 1200px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 720px) {
+            body {
+                padding: 18px;
+            }
+
+            .card {
+                padding: 22px;
+            }
+
+            .media-options {
+                flex-direction: column;
+                align-items: stretch;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>AgentFlow 2.0: Интеллектуальная Панель Управления</h1>
-        <p>Мониторинг и управление задачами на базе ИИ в реальном времени. Визуализация рабочего процесса (DAG).</p>
+        <section class="page-hero card">
+            <div class="page-title">
+                <h1>AgentFlow 2.0 — Панель Управления</h1>
+                <p class="page-subtitle">Единое место для мониторинга и управления мультиагентными кампаниями. Отслеживайте DAG, согласовывайте стратегии и запускайте генерацию контента в «AI»-стиле ночного неона.</p>
+                <div class="hero-meta">
+                    <span class="meta-chip">⚡ Реал-тайм DAG</span>
+                    <span class="meta-chip">🧠 Автономные агенты</span>
+                    <span class="meta-chip">🌌 Тёмная тема</span>
+                </div>
+            </div>
+            <div class="hero-illustration">
+                <div class="orbital" aria-hidden="true"></div>
+            </div>
+        </section>
 
-        <div class="task-form">
-            <h2>Создать новую задачу ИИ</h2>
-            <input type="text" id="taskName" value="Запуск нового продукта" required placeholder="Название проекта/кампании">
-            <input type="text" id="taskTopic" value="Разработка маркетинговой стратегии" required placeholder="Основная тема задачи">
-            <select id="taskTone">
-                <option value="enthusiastic">Восторженный</option>
-                <option value="formal">Официальный</option>
-                <option value="friendly">Дружелюбный</option>
-            </select>
+        <section class="card task-form">
+            <h2>Запустить новую задачу</h2>
+            <div class="task-form-grid">
+                <label class="input-group">
+                    Название кампании
+                    <input type="text" id="taskName" value="Кампания по продвижению 'Fitness Aesthetics'" required placeholder="Имя кампании">
+                </label>
+                <label class="input-group">
+                    Основная тема
+                    <input type="text" id="taskTopic" value="Новый подход к фитнесу от Габриеля" required placeholder="Тема кампании">
+                </label>
+                <label class="input-group">
+                    Тональность
+                    <select id="taskTone">
+                        <option value="enthusiastic">Энтузиастичный</option>
+                        <option value="friendly">Дружелюбный</option>
+                        <option value="formal">Официальный</option>
+                    </select>
+                </label>
+            </div>
             <div class="media-options">
                 <label class="checkbox">
                     <input type="checkbox" id="taskGenerateImage" checked>
-                    <span>Сгенерировать изображение (Промпт)</span>
+                    <span>🎨 Планировать изображение</span>
                 </label>
                 <label class="checkbox">
                     <input type="checkbox" id="taskGenerateVideo">
-                    <span>Сгенерировать видео (Сценарий)</span>
+                    <span>🎬 Планировать видео</span>
                 </label>
             </div>
             <div class="format-section">
-                <h3>Параметры генерации контента</h3>
+                <h3>Дополнительные параметры контента</h3>
                 <div class="format-grid">
-                    <div class="format-field">
-                        <label>Длина контента (слова)
-                            <input type="text" id="formatLength" placeholder="300 слов">
-                        </label>
-                    </div>
-                    <div class="format-field">
-                        <label>Целевая аудитория
-                            <input type="text" id="formatAudience" placeholder="Миллениалы">
-                        </label>
-                    </div>
-                    <div class="format-field">
-                        <label>Канал распространения
-                            <input type="text" id="formatChannel" placeholder="Instagram, YouTube...">
-                        </label>
-                    </div>
-                    <div class="format-field">
-                        <label>Призыв к действию (CTA)
-                            <input type="text" id="formatCTA" placeholder="Записаться на демо">
-                        </label>
-                    </div>
+                    <label class="input-group">
+                        Длина контента (слова)
+                        <input type="text" id="formatLength" placeholder="300 слов">
+                    </label>
+                    <label class="input-group">
+                        Целевая аудитория
+                        <input type="text" id="formatAudience" placeholder="Миллениалы">
+                    </label>
+                    <label class="input-group">
+                        Канал распространения
+                        <input type="text" id="formatChannel" placeholder="Instagram, YouTube...">
+                    </label>
+                    <label class="input-group">
+                        Призыв к действию
+                        <input type="text" id="formatCTA" placeholder="Записаться на демо">
+                    </label>
                 </div>
-                <textarea id="formatNotes" class="format-notes" placeholder="Дополнительные инструкции: стиль, ключевые слова, ограничения..."></textarea>
+                <label class="input-group">
+                    Дополнительные инструкции
+                    <textarea id="formatNotes" class="format-notes" placeholder="Стиль, ключевые сообщения, ограничения..."></textarea>
+                </label>
             </div>
-            <button id="startTaskBtn">Запустить ИИ-Агентов</button>
-        </div>
+            <button id="startTaskBtn">🚀 Запустить AgentFlow</button>
+        </section>
 
-        <div class="flex-container">
-            <div class="side-panel">
+        <section class="dashboard-grid">
+            <div class="card">
                 <h2>Список задач</h2>
-                <ul id="tasksContainer"></ul>
+                <ul id="tasksContainer" class="task-list"></ul>
             </div>
-            <div class="main-content">
-                <h2>Мониторинг <span id="taskTitle"></span></h2>
+            <div class="card dag-card">
+                <div class="schedule-header">
+                    <div>
+                        <h2>Мониторинг DAG</h2>
+                        <p class="schedule-subtitle">Выберите узел, чтобы раскрыть детали работы агента.</p>
+                    </div>
+                    <span class="meta-chip" id="taskTitle">Нет активной задачи</span>
+                </div>
                 <div id="networkContainer" class="vis-network"></div>
-                <div id="nodeDetailsContainer" style="margin-top: 20px;">
-                    <p>Нажмите на узел DAG для просмотра деталей, результатов и промптов.</p>
+                <div id="nodeDetailsContainer" class="node-details">
+                    <p>Нажмите на узел, чтобы увидеть статус, стоимость и подробные промпты.</p>
                 </div>
             </div>
-        </div>
+        </section>
 
-        <div id="scheduleContainer" style="margin-top: 40px;"></div>
+        <section id="scheduleContainer" class="card schedule-card"></section>
 
         <div id="promptModal" class="modal-backdrop">
             <div class="modal-content">
-                <h3>Редактировать Промпт и Перезапустить <span id="editNodeId"></span></h3>
+                <h3>Редактировать промпт агента <span id="editNodeId"></span></h3>
                 <p>Причина сбоя: <strong id="failReason"></strong></p>
-                <textarea id="newPromptArea" style="width: 100%; height: 200px;"></textarea>
+                <textarea id="newPromptArea" style="width: 100%; height: 220px;"></textarea>
                 <div class="modal-actions">
                     <button id="submitPromptBtn">Перезапустить</button>
                     <button class="secondary" id="cancelPromptBtn">Отмена</button>
@@ -172,7 +752,6 @@
         </div>
     </div>
 
-    
     <script>
         const tasksContainer = document.getElementById('tasksContainer');
         const taskTitle = document.getElementById('taskTitle');
@@ -202,16 +781,35 @@
 
         const socket = io();
 
+        const AGENT_FRIENDLY_NAMES = {
+            WriterAgent: '📝 Генерация текста',
+            GuardAgent: '🛡️ Проверка качества',
+            ProductAnalysisAgent: '🔍 Анализ продукта',
+            StrategyAgent: '♟️ Разработка стратегии',
+            HumanGateAgent: '👤 Ожидание одобрения',
+            StrategyReviewAgent: '🔄 Анализ стратегии',
+            ImageAgent: '🎨 Планирование изображения',
+            VideoAgent: '🎬 Планирование видео',
+            RetryAgent: '⚙️ Автокоррекция'
+        };
+
         function getColorByStatus(status) {
-            switch(status) {
-                case 'success': return { background: '#D4E6D2', border: '#28a745' };
-                case 'failed': return { background: '#F5C9C9', border: '#dc3545' };
-                case 'running': return { background: '#FFF3E0', border: '#FFA500' };
-                case 'paused': return { background: '#FFF59D', border: '#FBC02D' };
-                case 'planned': return { background: '#E0F7FA', border: '#17a2b8' };
+            switch (status) {
+                case 'success':
+                    return { background: 'rgba(34, 197, 94, 0.25)', border: '#22c55e', highlight: { background: 'rgba(34, 197, 94, 0.35)', border: '#22c55e' } };
+                case 'failed':
+                    return { background: 'rgba(248, 113, 113, 0.25)', border: '#f87171', highlight: { background: 'rgba(248, 113, 113, 0.35)', border: '#f87171' } };
+                case 'running':
+                    return { background: 'rgba(251, 191, 36, 0.25)', border: '#fbbf24', highlight: { background: 'rgba(251, 191, 36, 0.35)', border: '#fbbf24' } };
+                case 'paused':
+                    return { background: 'rgba(251, 146, 60, 0.25)', border: '#fb923c', highlight: { background: 'rgba(251, 146, 60, 0.35)', border: '#fb923c' } };
+                case 'planned':
+                    return { background: 'rgba(14, 165, 233, 0.2)', border: '#38bdf8', highlight: { background: 'rgba(14, 165, 233, 0.3)', border: '#38bdf8' } };
                 case 'manually_overridden':
-                case 'skipped_retry': return { background: '#e6e6e6', border: '#6c757d' };
-                default: return { background: '#dfe9f3', border: '#90a4ae' };
+                case 'skipped_retry':
+                    return { background: 'rgba(148, 163, 184, 0.2)', border: '#94a3b8', highlight: { background: 'rgba(148, 163, 184, 0.28)', border: '#cbd5f5' } };
+                default:
+                    return { background: 'rgba(99, 102, 241, 0.22)', border: '#6366f1', highlight: { background: 'rgba(99, 102, 241, 0.32)', border: '#6366f1' } };
             }
         }
 
@@ -225,6 +823,9 @@
             }
             if (['CONTENT_FAILED', 'GENERATION_FAILED', 'FAILED'].includes(normalized)) {
                 return { label: 'Ошибка', className: 'status-failed' };
+            }
+            if (['PAUSED', 'WAITING', 'AWAITING_APPROVAL'].includes(normalized)) {
+                return { label: 'Пауза', className: 'status-paused' };
             }
             return { label: 'План', className: 'status-planned' };
         }
@@ -278,17 +879,21 @@
 
             nodesData.forEach(node => {
                 const status = (node.status || '').toLowerCase();
-                const labelAgent = node.agent || node.agent_type || 'Unknown';
+                const agentType = node.agent || node.agent_type || 'Unknown';
 
                 if (status === 'skipped_retry') return;
 
+                const friendlyName = AGENT_FRIENDLY_NAMES[agentType] || agentType;
+                const color = getColorByStatus(status);
+
                 visNodes.push({
                     id: node.id,
-                    label: `${labelAgent.replace('Agent', '')}
-(${node.id})
-${node.status}`,
-                    color: getColorByStatus(status),
+                    label: `${friendlyName}\n(${node.id})\n${node.status}`,
+                    color,
+                    font: { color: '#f9fafb', size: 16, face: 'Inter' },
+                    margin: 12,
                     shape: 'box',
+                    borderWidth: 2,
                     nodeData: node
                 });
 
@@ -296,7 +901,7 @@ ${node.status}`,
                     node.dependsOn.forEach(depId => {
                         const depNode = nodesData.find(n => n.id === depId);
                         if (depNode?.status?.toLowerCase() === 'skipped_retry') return;
-                        visEdges.push({ from: depId, to: node.id, arrows: 'to' });
+                        visEdges.push({ from: depId, to: node.id, arrows: { to: { enabled: true, scaleFactor: 0.7 } }, color: { color: 'rgba(148, 163, 184, 0.5)' } });
                     });
                 }
             });
@@ -304,8 +909,25 @@ ${node.status}`,
             visData.nodes.add(visNodes);
             visData.edges.add(visEdges);
 
+            const options = {
+                physics: { enabled: false },
+                interaction: {
+                    hover: true,
+                    zoomView: true
+                },
+                nodes: {
+                    shapeProperties: { borderDashes: false },
+                    shadow: true
+                },
+                edges: {
+                    smooth: { type: 'cubicBezier' },
+                    shadow: true,
+                    color: 'rgba(148, 163, 184, 0.45)'
+                }
+            };
+
             if (!network) {
-                network = new vis.Network(container, visData, { physics: { enabled: false } });
+                network = new vis.Network(container, visData, options);
                 network.on('selectNode', params => {
                     const nodeId = params.nodes[0];
                     if (nodeId) {
@@ -314,6 +936,7 @@ ${node.status}`,
                     }
                 });
             } else {
+                network.setOptions(options);
                 network.setData(visData);
             }
         }
@@ -382,7 +1005,7 @@ ${node.status}`,
                 const statusText = task.status || 'UNKNOWN';
                 const statusClass = `status-${statusText.toLowerCase().replace(/[^a-z0-9_-]/g, '-')}`;
                 const displayName = task?.name || task.id;
-                const trimmedName = displayName.length > 30 ? `${displayName.slice(0, 30)}…` : displayName;
+                const trimmedName = displayName.length > 38 ? `${displayName.slice(0, 38)}…` : displayName;
                 const safeTitle = escapeHtml(displayName);
                 const safeLabel = escapeHtml(trimmedName);
                 const safeStatus = escapeHtml(statusText);
@@ -441,122 +1064,213 @@ ${node.status}`,
         async function selectTask(taskId, scrollIntoView = true) {
             try {
                 const response = await fetch(`/api/tasks/${taskId}`);
-                if (!response.ok) throw new Error('Задача не найдена');
-                const { task, nodes, schedule } = await response.json();
-                activeTaskId = taskId;
-                taskTitle.textContent = task?.name ? `— ${task.name}` : '';
-                drawNetwork(nodes, taskId);
-                renderSchedule(schedule, taskId);
-
-                if (nodes.length) {
-                    const selected = network?.getSelectedNodes?.()[0];
-                    const defaultNode = nodes.find(n => n.id === selected) || nodes.find(n => n.status === 'FAILED') || nodes[nodes.length - 1];
-                    showNodeDetails(defaultNode);
-                } else {
-                    nodeDetailsContainer.innerHTML = '<p>Нет узлов для отображения.</p>';
+                const payload = await response.json();
+                if (!response.ok) {
+                    throw new Error(payload.message || 'Не удалось загрузить задачу');
                 }
 
-                Array.from(tasksContainer.querySelectorAll('li.task-item')).forEach(li => {
-                    li.classList.toggle('active', li.querySelector('a')?.dataset.taskId === activeTaskId);
-                });
+                activeTaskId = taskId;
+                const tasks = Array.from(tasksContainer.querySelectorAll('.task-item'));
+                tasks.forEach(item => item.classList.toggle('active', item.querySelector('a')?.dataset.taskId === taskId));
+
+                if (scrollIntoView) {
+                    const currentItem = tasksContainer.querySelector(`[data-task-id="${taskId}"]`);
+                    currentItem?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+
+                const { nodes = [], schedule = [], status, name } = payload;
+                taskTitle.textContent = name ? `Задача: ${name}` : `ID: ${taskId}`;
+
+                drawNetwork(nodes, taskId);
+                renderSchedule(schedule, taskId, status, nodes);
+
+                if (!nodes.length) {
+                    nodeDetailsContainer.innerHTML = '<p>Ожидаем данные DAG от агентов…</p>';
+                }
             } catch (error) {
-                alert(error.message || 'Ошибка при загрузке задачи.');
+                alert(error.message || 'Не удалось загрузить задачу.');
             }
         }
 
         function resetTaskView() {
-            taskTitle.textContent = '';
             activeTaskId = null;
-            currentSchedule = [];
+            taskTitle.textContent = 'Нет активной задачи';
             visData.nodes.clear();
             visData.edges.clear();
-            if (network) {
-                network.setData({ nodes: visData.nodes, edges: visData.edges });
-            }
-            nodeDetailsContainer.innerHTML = '<p>Выберите задачу для просмотра деталей.</p>';
+            network?.setData(visData);
+            nodeDetailsContainer.innerHTML = '<p>Выберите задачу, чтобы просмотреть рабочий процесс.</p>';
             scheduleContainer.innerHTML = '';
-            if (scheduleChart) {
-                scheduleChart.destroy();
-                scheduleChart = null;
+        }
+
+        async function unblockHumanGate(taskId, nodeId) {
+            if (!taskId || !nodeId) return;
+            try {
+                const response = await fetch(`/api/tasks/${taskId}/unblock/${nodeId}`, { method: 'POST' });
+                const payload = await response.json();
+                if (!response.ok) {
+                    throw new Error(payload.message || 'Не удалось подтвердить план.');
+                }
+                alert(payload.message || 'План подтверждён. Продолжаем!');
+            } catch (error) {
+                alert(error.message || 'Ошибка при подтверждении плана.');
             }
         }
 
-        function renderSchedule(schedule, taskId) {
-            if (!scheduleContainer) return;
+        async function generateContentFromSchedule(taskId, index) {
+            if (!taskId || index === undefined) return;
+
+            const button = document.querySelector(`button[data-action="generate-content"][data-index="${index}"]`);
+            const originalLabel = button ? button.textContent : '';
+            if (button) {
+                button.disabled = true;
+                button.textContent = 'Генерация…';
+            }
+
+            let shouldUnlock = false;
+
+            try {
+                const response = await fetch(`/api/tasks/${taskId}/schedule/generate/${index}`, {
+                    method: 'POST'
+                });
+                const payload = await response.json();
+                if (!response.ok) {
+                    throw new Error(payload.message || 'Не удалось запустить генерацию.');
+                }
+                alert(payload.message);
+            } catch (error) {
+                shouldUnlock = true;
+                alert(error.message || 'Ошибка при запуске генерации.');
+            } finally {
+                if (button && shouldUnlock) {
+                    button.disabled = false;
+                    button.textContent = originalLabel || '⚙️ Сгенерировать';
+                }
+            }
+        }
+
+        function getInitialPrompt(node) {
+            const originalInput = node.input_data || {};
+            if (node.agent_type === 'WriterAgent') {
+                 return originalInput.promptOverride || `Write an ${originalInput.tone} article about ${originalInput.topic}.`;
+            }
+            if (node.agent_type === 'ImageAgent') {
+                 return originalInput.promptOverride || originalInput.description || 'Key visual for the campaign';
+            }
+            if (node.agent_type === 'StrategyAgent') {
+                 return JSON.stringify({ topic: originalInput.topic, format: originalInput.format }, null, 2);
+            }
+            return JSON.stringify(originalInput, null, 2);
+        }
+
+        function showNodeDetails(node) {
+            if (!node) return;
+            const statusClass = `status-${(node.status || '').toLowerCase()}`;
+            const cost = Number.isFinite(node.cost) ? node.cost : 0;
+            const initialPrompt = getInitialPrompt(node);
+            const friendlyName = AGENT_FRIENDLY_NAMES[node.agent_type] || node.agent_type;
+
+            let html = `
+                <h3>${friendlyName}</h3>
+                <p><strong>Узел:</strong> ${escapeHtml(node.id)} · <span class="status-pill ${statusClass}">${escapeHtml(node.status)}</span></p>
+                <p><strong>Стоимость:</strong> $${cost.toFixed(4)}</p>
+                <p><strong>Зависимости:</strong> ${(node.dependsOn || []).join(', ') || '—'}</p>
+                <div>
+                    <h4>Промпт для агента</h4>
+                    <pre>${escapeHtml(initialPrompt)}</pre>
+                </div>
+            `;
+
+            const finalPrompt = node.result_data?.meta?.prompt || node.result_data?.meta?.promptOverride;
+            if (finalPrompt) {
+                html += `<div><h4>Финальный промпт для LLM</h4><pre>${escapeHtml(finalPrompt)}</pre></div>`;
+            }
+
+            if (node.agent_type === 'RetryAgent' && node.result_data?.internalPrompt) {
+                html += `<div><h4>Внутренний промпт (коррекция)</h4><pre>${escapeHtml(node.result_data.internalPrompt)}</pre></div>`;
+            }
+
+            const generatedContent = node.result_data?.finalImagePrompt || node.result_data?.final_video_prompt;
+            if (generatedContent) {
+                html += `<div><h4>Итоговый творческий план</h4><pre>${escapeHtml(generatedContent)}</pre></div>`;
+            }
+
+            if (node.agent_type === 'StrategyAgent' && Array.isArray(node.result_data?.schedule)) {
+                html += `<div><h4>План публикаций</h4><pre>${escapeHtml(JSON.stringify(node.result_data.schedule, null, 2))}</pre></div>`;
+            }
+
+            if (node.result_data) {
+                html += `<div><h4>Полный результат</h4><pre>${escapeHtml(JSON.stringify(node.result_data, null, 2))}</pre></div>`;
+            }
+
+            if (node.status === 'FAILED') {
+                html += `<p><strong class="status-failed">Узел завершился с ошибкой.</strong> ${escapeHtml(node.result_data?.reason || 'Проверьте лог.')}</p>`;
+                html += `<a href="/api/logs/${node.taskId}" target="_blank"><button class="secondary">Открыть лог задачи</button></a>`;
+                if (node.agent_type?.includes('GuardAgent')) {
+                    html += `<button style="margin-left: 12px;" onclick="openPromptModal('${node.id}')">✏️ Редактировать промпт</button>`;
+                }
+            }
+
+            nodeDetailsContainer.innerHTML = html;
+        }
+
+        function renderSchedule(schedule, taskId, taskStatus = '', nodes = []) {
             currentSchedule = Array.isArray(schedule) ? schedule : [];
 
             if (!currentSchedule.length) {
-                scheduleContainer.innerHTML = '<h3>График Публикаций</h3><p>График еще не разработан (зависит от StrategyAgent).</p>';
-                if (scheduleChart) {
-                    scheduleChart.destroy();
-                    scheduleChart = null;
-                }
+                scheduleContainer.innerHTML = `
+                    <h2>График публикаций и статистика</h2>
+                    <p class="schedule-subtitle">Ожидаем формирования стратегии и плана от агентов…</p>
+                `;
                 return;
             }
 
-            const visNodesArray = typeof visData?.nodes?.get === 'function'
-                ? visData.nodes.get({ returnType: 'array' })
-                : [];
-            const nodesDataList = Array.isArray(visNodesArray)
-                ? visNodesArray.map(entry => entry?.nodeData).filter(Boolean)
-                : [];
-
-            const strategyNode = nodesDataList.find(node => {
-                const agentType = (node.agent_type || node.agent || '').toLowerCase();
-                return agentType === 'strategyagent';
-            });
-
-            const humanGateNodes = nodesDataList.filter(node => {
-                const agentType = (node.agent_type || node.agent || '').toLowerCase();
-                return agentType === 'humangateagent';
-            });
-
-            const pausedHumanGateNode = humanGateNodes.find(node => (node.status || '').toUpperCase() === 'PAUSED');
-            const completedHumanGateNode = humanGateNodes.find(node => (node.status || '').toUpperCase() === 'SUCCESS');
-            const isStrategyComplete = (strategyNode?.status || '').toUpperCase() === 'SUCCESS';
-            const isPaused = Boolean(pausedHumanGateNode);
-            const isHumanGateComplete = Boolean(completedHumanGateNode);
-            const hasHumanGate = humanGateNodes.length > 0;
-
-            const awaitingHumanInput = hasHumanGate && isPaused;
-            const strategyReady = isStrategyComplete;
-            const planEditable = strategyReady && (!hasHumanGate || isHumanGateComplete || isPaused);
-            const metricsEditable = (!hasHumanGate && strategyReady) || isPaused || isHumanGateComplete;
-            const generatorEnabled = strategyReady && (!hasHumanGate || isHumanGateComplete || isPaused);
+            const pausedHumanGateNode = Array.from(nodes || []).find(node => node.agent_type === 'HumanGateAgent' && node.status === 'PAUSED');
+            const awaitingHumanInput = Boolean(pausedHumanGateNode);
+            const hasHumanGate = (nodes || []).some(node => node.agent_type === 'HumanGateAgent');
+            const strategyReady = (nodes || []).some(node => node.agent_type === 'StrategyAgent' && node.status === 'SUCCESS');
+            const humanGateCompleted = (nodes || []).some(node => node.agent_type === 'HumanGateAgent' && node.status === 'SUCCESS');
+            const generatorEnabled = !awaitingHumanInput;
+            const planEditable = awaitingHumanInput || (!hasHumanGate || humanGateCompleted);
 
             const planDisabledAttr = planEditable ? '' : 'disabled';
-            const metricsDisabledAttr = metricsEditable ? '' : 'disabled';
+            const metricsDisabledAttr = generatorEnabled ? '' : 'disabled';
             const generatorDisabledAttr = generatorEnabled ? '' : 'disabled';
 
             const statusNotice = awaitingHumanInput
-                ? 'Расписание ожидает подтверждения. Можно скорректировать план и ввести метрики.'
-                : isHumanGateComplete
-                    ? 'Расписание одобрено. Можно корректировать план и генерировать контент.'
+                ? 'Расписание ожидает подтверждения. Можно корректировать план перед запуском.'
+                : humanGateCompleted
+                    ? 'Расписание одобрено. Метрики доступны для обновления, генерация активна.'
                     : strategyReady
                         ? hasHumanGate
-                            ? 'Расписание сформировано и ожидает подтверждения.'
-                            : 'Расписание сформировано. Доступно редактирование и генерация контента.'
+                            ? 'План сформирован и ждёт вашего финального одобрения.'
+                            : 'План сформирован. Доступно редактирование и генерация контента.'
                         : 'Расписание формируется автоматически.';
 
             let html = `
                 <div class="schedule-header">
-                    <h3>График Публикаций и Статистика</h3>
-                    <span>${statusNotice}</span>
+                    <div>
+                        <h2>График публикаций и статистика</h2>
+                        <p class="schedule-subtitle">${escapeHtml(statusNotice)}</p>
+                    </div>
+                    ${awaitingHumanInput ? '<span class="status-pill status-paused">Требуется одобрение</span>' : ''}
                 </div>
                 <div class="schedule-table-wrapper">
                     <table class="schedule-table">
-                        <tr>
-                            <th>#</th>
-                            <th>Дата</th>
-                            <th>Тип</th>
-                            <th>Канал</th>
-                            <th>Тема</th>
-                            <th>Цель</th>
-                            <th>Заметки</th>
-                            <th>Контент / Статус</th>
-                            <th>Просмотры</th>
-                            <th>Лайки</th>
-                        </tr>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Дата</th>
+                                <th>Тип</th>
+                                <th>Канал</th>
+                                <th>Тема</th>
+                                <th>Цель</th>
+                                <th>Заметки</th>
+                                <th>Контент / Статус</th>
+                                <th>Просмотры</th>
+                                <th>Лайки</th>
+                            </tr>
+                        </thead>
+                        <tbody>
             `;
 
             currentSchedule.forEach((item, index) => {
@@ -573,7 +1287,7 @@ ${node.status}`,
                 const contentData = extractContentStrings(item);
                 const generatedAt = formatGeneratedAt(item.last_generated_at);
                 const errorMessage = item.generation_error
-                    ? `<div class="content-placeholder" style="background:#fff5f5;border-color:#ffcdd2;color:#b71c1c;">Ошибка: ${escapeHtml(item.generation_error)}</div>`
+                    ? `<div class="content-placeholder" style="border-color: rgba(248, 113, 113, 0.45); color: #fca5a5;">Ошибка: ${escapeHtml(item.generation_error)}</div>`
                     : '';
 
                 const safeDate = escapeHtml(dateValue);
@@ -586,7 +1300,7 @@ ${node.status}`,
                 const safeGeneratedAt = escapeHtml(generatedAt);
                 const generatedLabel = safeGeneratedAt ? `<span class="content-timestamp">Обновлено: ${safeGeneratedAt}</span>` : '';
                 const safeNodeId = item.last_generated_id ? escapeHtml(item.last_generated_id) : '';
-                const nodeLabel = safeNodeId ? `<span class="content-timestamp">ID: ${safeNodeId}</span>` : '';
+                const nodeLabel = safeNodeId ? `<span class="content-timestamp">ID узла: ${safeNodeId}</span>` : '';
 
                 const contentFull = contentData.full;
                 const contentPreview = contentData.preview;
@@ -609,11 +1323,11 @@ ${node.status}`,
 
                 const contentCell = `
                     <div class="content-cell">
-                        <div class="content-meta field-stack">
-                            <span class="tag-pill ${statusInfo.className}">${statusInfo.label}</span>
+                        <div class="content-meta">
+                            <span class="status-pill ${statusInfo.className}">${statusInfo.label}</span>
                             ${generatedLabel}
                             ${nodeLabel}
-                            <button class="secondary" data-action="generate-content" data-index="${index}" ${generatorDisabledAttr}>Generate</button>
+                            <button class="secondary" data-action="generate-content" data-index="${index}" ${generatorDisabledAttr}>⚙️ Сгенерировать</button>
                         </div>
                         ${detailsBlock}
                         ${errorMessage}
@@ -637,6 +1351,7 @@ ${node.status}`,
             });
 
             html += `
+                        </tbody>
                     </table>
                 </div>
                 <div class="chart-wrapper">
@@ -644,8 +1359,8 @@ ${node.status}`,
                 </div>
             `;
 
-            if (isPaused && pausedHumanGateNode?.id) {
-                html += `<button style="margin-top: 20px;" onclick="unblockHumanGate('${taskId}', '${pausedHumanGateNode.id}')">Одобрить Расписание и Продолжить Анализ</button>`;
+            if (awaitingHumanInput && pausedHumanGateNode?.id) {
+                html += `<button class="approve-btn" onclick="unblockHumanGate('${taskId}', '${pausedHumanGateNode.id}')">✅ Одобрить план и продолжить</button>`;
             }
 
             scheduleContainer.innerHTML = html;
@@ -700,8 +1415,8 @@ ${node.status}`,
                         {
                             label: 'Просмотры',
                             data: views,
-                            borderColor: '#1976d2',
-                            backgroundColor: 'rgba(25, 118, 210, 0.15)',
+                            borderColor: '#38bdf8',
+                            backgroundColor: 'rgba(56, 189, 248, 0.18)',
                             fill: true,
                             tension: 0.35,
                             pointRadius: 3
@@ -709,8 +1424,8 @@ ${node.status}`,
                         {
                             label: 'Лайки',
                             data: likes,
-                            borderColor: '#ff7043',
-                            backgroundColor: 'rgba(255, 112, 67, 0.18)',
+                            borderColor: '#a855f7',
+                            backgroundColor: 'rgba(168, 85, 247, 0.22)',
                             fill: true,
                             tension: 0.35,
                             pointRadius: 3
@@ -721,10 +1436,21 @@ ${node.status}`,
                     responsive: true,
                     maintainAspectRatio: false,
                     scales: {
-                        y: { beginAtZero: true, ticks: { precision: 0 } }
+                        x: {
+                            ticks: { color: 'rgba(226, 232, 240, 0.8)' },
+                            grid: { color: 'rgba(148, 163, 184, 0.1)' }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            ticks: { color: 'rgba(226, 232, 240, 0.8)', precision: 0 },
+                            grid: { color: 'rgba(148, 163, 184, 0.1)' }
+                        }
                     },
                     plugins: {
-                        legend: { position: 'bottom' }
+                        legend: {
+                            position: 'bottom',
+                            labels: { color: 'rgba(226, 232, 240, 0.85)' }
+                        }
                     }
                 }
             });
@@ -760,135 +1486,6 @@ ${node.status}`,
             }
         }
 
-        async function unblockHumanGate(taskId, nodeId) {
-            const confirmation = window.confirm('Вы уверены? Это запустит StrategyReviewAgent с текущими метриками.');
-            if (!confirmation) {
-                return;
-            }
-
-            try {
-                const editableFields = scheduleContainer.querySelectorAll('input[data-field], textarea[data-field]');
-                editableFields.forEach(field => {
-                    field.dispatchEvent(new Event('change'));
-                });
-
-                if (editableFields.length) {
-                    await new Promise(resolve => setTimeout(resolve, 120));
-                }
-
-                const response = await fetch(`/api/tasks/${taskId}/unblock/${nodeId}`, { method: 'POST' });
-                const payload = await response.json().catch(() => ({}));
-                if (!response.ok) {
-                    throw new Error(payload.message || 'Не удалось разблокировать узел.');
-                }
-                alert(payload.message || 'Разблокировка выполнена.');
-            } catch (error) {
-                alert(error.message || 'Ошибка при разблокировке.');
-            }
-        }
-
-        async function generateContentFromSchedule(taskId, index) {
-            if (!Number.isInteger(index)) {
-                return;
-            }
-
-            const confirmation = window.confirm('Запустить генерацию контента на основе текущего плана?');
-            if (!confirmation) {
-                return;
-            }
-
-            const button = document.querySelector(`button[data-action="generate-content"][data-index="${index}"]`);
-            const originalLabel = button ? button.textContent : '';
-            if (button) {
-                button.disabled = true;
-                button.textContent = 'Генерация…';
-            }
-
-            let shouldUnlock = false;
-
-            try {
-                const response = await fetch(`/api/tasks/${taskId}/schedule/generate/${index}`, {
-                    method: 'POST'
-                });
-                const payload = await response.json();
-                if (!response.ok) {
-                    throw new Error(payload.message || 'Не удалось запустить генерацию.');
-                }
-                alert(payload.message);
-            } catch (error) {
-                shouldUnlock = true;
-                alert(error.message || 'Ошибка при запуске генерации.');
-            } finally {
-                if (button && shouldUnlock) {
-                    button.disabled = false;
-                    button.textContent = originalLabel || 'Generate Content';
-                }
-            }
-        }
-
-        function getInitialPrompt(node) {
-            const originalInput = node.input_data || {};
-            if (node.agent_type === 'WriterAgent') {
-                 return originalInput.promptOverride || `Write an ${originalInput.tone} article about ${originalInput.topic}.`;
-            }
-            if (node.agent_type === 'ImageAgent') {
-                 return originalInput.promptOverride || originalInput.description || 'Key visual for the campaign';
-            }
-            if (node.agent_type === 'StrategyAgent') {
-                 return JSON.stringify({ topic: originalInput.topic, format: originalInput.format }, null, 2);
-            }
-            return JSON.stringify(originalInput, null, 2);
-        }
-
-        function showNodeDetails(node) {
-            if (!node) return;
-            const statusClass = `status-${(node.status || '').toLowerCase()}`;
-            const cost = Number.isFinite(node.cost) ? node.cost : 0;
-            const initialPrompt = getInitialPrompt(node);
-
-            let html = `
-                <h3>Узел: ${node.id} (${node.agent_type.replace('Agent', ' Agent')})</h3>
-                <p><strong>Статус:</strong> <span class="status-pill ${statusClass}">${node.status}</span></p>
-                <p><strong>Стоимость:</strong> $${cost.toFixed(4)}</p>
-                <p><strong>Зависимости:</strong> ${(node.dependsOn || []).join(', ') || '—'}</p>
-
-                <h4>Промпт для агента (Вход)</h4>
-                <pre class="prompt-input">${initialPrompt}</pre>
-            `;
-
-            const finalPrompt = node.result_data?.meta?.prompt || node.result_data?.meta?.promptOverride;
-            if (finalPrompt) {
-                html += `<h4>Финальный промпт, отправленный в LLM</h4><pre>${finalPrompt}</pre>`;
-            }
-
-            if (node.agent_type === 'RetryAgent' && node.result_data?.internalPrompt) {
-                html += `<h4>Внутренний промпт (Для LLM-коррекции)</h4><pre>${node.result_data.internalPrompt}</pre>`;
-            }
-
-            const generatedContent = node.result_data?.finalImagePrompt || node.result_data?.final_video_prompt;
-            if (generatedContent) {
-                html += `<h4>Итоговый Сгенерированный План/Промпт</h4><pre>${generatedContent}</pre>`;
-            }
-
-            if (node.agent_type === 'StrategyAgent' && Array.isArray(node.result_data?.schedule)) {
-                html += `<h4>План публикаций (JSON)</h4><pre>${JSON.stringify(node.result_data.schedule, null, 2)}</pre>`;
-            }
-
-            if (node.result_data) {
-                html += `<h4>Полный Результат</h4><pre>${JSON.stringify(node.result_data, null, 2)}</pre>`;
-            }
-
-            if (node.status === 'FAILED') {
-                html += `<p><strong class="status-failed">Узел завершился с ошибкой. Причина:</strong> ${node.result_data?.reason || 'Проверьте лог.'}</p>`;
-                html += `<a href="/api/logs/${node.taskId}" target="_blank"><button class="secondary">Посмотреть Лог Задачи</button></a>`;
-                if (node.agent_type?.includes('GuardAgent')) {
-                    html += `<button style="margin-left: 10px;" onclick="openPromptModal('${node.id}')">Редактировать Промпт</button>`;
-                }
-            }
-
-            nodeDetailsContainer.innerHTML = html;
-        }
-
         function openPromptModal(failedGuardId) {
             pendingRestartNode = failedGuardId;
             editNodeId.textContent = failedGuardId;
@@ -901,7 +1498,7 @@ ${node.status}`,
                 newPromptArea.value = currentPrompt;
             }
             failReason.textContent = nodeData?.result_data?.reason || 'Неизвестная причина сбоя.';
-            promptModal.style.display = 'block';
+            promptModal.style.display = 'flex';
         }
 
         async function submitManualRestart() {
@@ -928,13 +1525,16 @@ ${node.status}`,
             }
         }
 
-        function closePromptModal() { promptModal.style.display = 'none'; pendingRestartNode = null; }
+        function closePromptModal() {
+            promptModal.style.display = 'none';
+            pendingRestartNode = null;
+        }
 
         socket.on('task-update', update => {
             if (!update || !update.taskId) return;
             if (update.taskId === activeTaskId) {
                 drawNetwork(update.nodes || [], update.taskId);
-                renderSchedule(update.schedule || [], update.taskId);
+                renderSchedule(update.schedule || [], update.taskId, update.status, update.nodes);
                 const selectedNodeId = network?.getSelectedNodes?.()[0];
                 if (selectedNodeId) {
                     const nodeEntry = visData.nodes.get(selectedNodeId);
@@ -966,6 +1566,5 @@ ${node.status}`,
         window.updateScheduleStat = updateScheduleStat;
         window.unblockHumanGate = unblockHumanGate;
     </script>
-
 </body>
 </html>
