@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node src/server.mjs",
     "test": "vitest run",
-    "build": "esbuild src/server.mjs --bundle --platform=node --outfile=dist/server.cjs --format=cjs",
+    "build": "node scripts/build.mjs",
     "build:exe": "npm run build && pkg dist/server.cjs --targets node18-win-x64 --output agentflow-launcher.exe"
   },
   "dependencies": {
