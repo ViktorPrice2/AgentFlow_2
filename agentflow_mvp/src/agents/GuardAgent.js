@@ -1,6 +1,7 @@
 // src/agents/GuardAgent.js
 // Файл input_file_1.js
 
+import '../utils/loadEnv.js';
 import { Logger } from '../core/Logger.js';
 import { TaskStore } from '../core/db/TaskStore.js';
 

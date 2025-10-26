@@ -1,7 +1,9 @@
 import fs from 'fs';
 import path from 'path';
+import '../utils/loadEnv.js';
+import { resolveAppPath } from '../utils/appPaths.js';
 
-const LOG_DIR = 'logs';
+const LOG_DIR = resolveAppPath('logs');
 
 export class Logger {
   constructor(taskId) {

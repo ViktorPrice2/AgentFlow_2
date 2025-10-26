@@ -1,9 +1,10 @@
 import express from 'express';
 import { createServer } from 'http';
 import { Server as SocketIoServer } from 'socket.io';
-import 'dotenv/config';
 import fs from 'fs';
 import path from 'path';
+import './utils/loadEnv.js';
+import { resolveAppPath } from './utils/appPaths.js';
 import { MasterAgent } from './agents/MasterAgent.js';
 import { TaskStore } from './core/db/TaskStore.js';
 import { Logger } from './core/Logger.js';
@@ -13,10 +14,10 @@ const httpServer = createServer(app);
 const io = new SocketIoServer(httpServer);
 const PORT = process.env.PORT || 3000;
 
-const DAG_PATH = path.join(process.cwd(), 'plans', 'dag.json');
-const PUBLIC_DIR = path.join(process.cwd(), 'public');
-const RESULTS_DIR = path.join(process.cwd(), 'results');
-const LOGS_DIR = path.join(process.cwd(), 'logs');
+const DAG_PATH = resolveAppPath('plans', 'dag.json');
+const PUBLIC_DIR = resolveAppPath('public');
+const RESULTS_DIR = resolveAppPath('results');
+const LOGS_DIR = resolveAppPath('logs');
 
 let dagTemplate = '{}';
 try {

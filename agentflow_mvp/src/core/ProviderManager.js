@@ -1,7 +1,8 @@
 import axios from 'axios';
 import { promises as fs } from 'fs';
 import path from 'path';
-import 'dotenv/config';
+import '../utils/loadEnv.js';
+import { resolveAppPath } from '../utils/appPaths.js';
 import { GoogleGenAI } from '@google/genai';
 
 const getMockMode = () => process.env.MOCK_MODE === 'true';
@@ -30,7 +31,7 @@ const logAxiosError = (error, contextLabel) => {
 };
 
 // --- Image Utilities --- 
-const RESULTS_DIR = path.join(process.cwd(), 'results');
+const RESULTS_DIR = resolveAppPath('results');
 const PLACEHOLDER_PIXEL_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==';
 const ensureResultsDir = async () => { await fs.mkdir(RESULTS_DIR, { recursive: true }); };
 const extensionFromMimeType = mimeType => mimeType?.toLowerCase().includes('jpeg') ? 'jpg' : 'png';

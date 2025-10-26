@@ -1,3 +1,4 @@
+import '../utils/loadEnv.js';
 import { Logger } from '../core/Logger.js';
 import { TaskStore } from '../core/db/TaskStore.js';
 

@@ -1292,8 +1292,8 @@ var require_node = __commonJS({
           }
           break;
         case "FILE":
-          var fs6 = require("fs");
-          stream5 = new fs6.SyncWriteStream(fd2, { autoClose: false });
+          var fs7 = require("fs");
+          stream5 = new fs7.SyncWriteStream(fd2, { autoClose: false });
           stream5._type = "fs";
           break;
         case "PIPE":
@@ -18269,7 +18269,7 @@ var require_view = __commonJS({
     "use strict";
     var debug = require_src()("express:view");
     var path5 = require("path");
-    var fs6 = require("fs");
+    var fs7 = require("fs");
     var dirname = path5.dirname;
     var basename = path5.basename;
     var extname = path5.extname;
@@ -18335,7 +18335,7 @@ var require_view = __commonJS({
     function tryStat(path6) {
       debug('stat "%s"', path6);
       try {
-        return fs6.statSync(path6);
+        return fs7.statSync(path6);
       } catch (e) {
         return void 0;
       }
@@ -18704,7 +18704,7 @@ var require_types = __commonJS({
 var require_mime = __commonJS({
   "node_modules/mime/mime.js"(exports2, module2) {
     var path5 = require("path");
-    var fs6 = require("fs");
+    var fs7 = require("fs");
     function Mime() {
       this.types = /* @__PURE__ */ Object.create(null);
       this.extensions = /* @__PURE__ */ Object.create(null);
@@ -18725,7 +18725,7 @@ var require_mime = __commonJS({
     };
     Mime.prototype.load = function(file) {
       this._loading = file;
-      var map = {}, content = fs6.readFileSync(file, "ascii"), lines = content.split(/[\r\n]+/);
+      var map = {}, content = fs7.readFileSync(file, "ascii"), lines = content.split(/[\r\n]+/);
       lines.forEach(function(line) {
         var fields = line.replace(/\s*#.*|^\s*|\s*$/g, "").split(/\s+/);
         map[fields.shift()] = fields;
@@ -18963,7 +18963,7 @@ var require_send = __commonJS({
     var escapeHtml = require_escape_html();
     var etag = require_etag();
     var fresh = require_fresh();
-    var fs6 = require("fs");
+    var fs7 = require("fs");
     var mime = require_mime();
     var ms = require_ms2();
     var onFinished = require_on_finished();
@@ -19296,7 +19296,7 @@ var require_send = __commonJS({
       var i = 0;
       var self2 = this;
       debug('stat "%s"', path6);
-      fs6.stat(path6, function onstat(err, stat2) {
+      fs7.stat(path6, function onstat(err, stat2) {
         if (err && err.code === "ENOENT" && !extname(path6) && path6[path6.length - 1] !== sep) {
           return next(err);
         }
@@ -19311,7 +19311,7 @@ var require_send = __commonJS({
         }
         var p = path6 + "." + self2._extensions[i++];
         debug('stat "%s"', p);
-        fs6.stat(p, function(err2, stat2) {
+        fs7.stat(p, function(err2, stat2) {
           if (err2) return next(err2);
           if (stat2.isDirectory()) return next();
           self2.emit("file", p, stat2);
@@ -19329,7 +19329,7 @@ var require_send = __commonJS({
         }
         var p = join(path6, self2._index[i]);
         debug('stat "%s"', p);
-        fs6.stat(p, function(err2, stat2) {
+        fs7.stat(p, function(err2, stat2) {
           if (err2) return next(err2);
           if (stat2.isDirectory()) return next();
           self2.emit("file", p, stat2);
@@ -19341,7 +19341,7 @@ var require_send = __commonJS({
     SendStream.prototype.stream = function stream4(path6, options) {
       var self2 = this;
       var res = this.res;
-      var stream5 = fs6.createReadStream(path6, options);
+      var stream5 = fs7.createReadStream(path6, options);
       this.emit("stream", stream5);
       stream5.pipe(res);
       function cleanup() {
@@ -41023,7 +41023,7 @@ var require_package2 = __commonJS({
 // node_modules/dotenv/lib/main.js
 var require_main = __commonJS({
   "node_modules/dotenv/lib/main.js"(exports2, module2) {
-    var fs6 = require("fs");
+    var fs7 = require("fs");
     var path5 = require("path");
     var os = require("os");
     var crypto7 = require("crypto");
@@ -41132,7 +41132,7 @@ var require_main = __commonJS({
       if (options && options.path && options.path.length > 0) {
         if (Array.isArray(options.path)) {
           for (const filepath of options.path) {
-            if (fs6.existsSync(filepath)) {
+            if (fs7.existsSync(filepath)) {
               possibleVaultPath = filepath.endsWith(".vault") ? filepath : `${filepath}.vault`;
             }
           }
@@ -41142,13 +41142,13 @@ var require_main = __commonJS({
       } else {
         possibleVaultPath = path5.resolve(process.cwd(), ".env.vault");
       }
-      if (fs6.existsSync(possibleVaultPath)) {
+      if (fs7.existsSync(possibleVaultPath)) {
         return possibleVaultPath;
       }
       return null;
     }
-    function _resolveHome(envPath) {
-      return envPath[0] === "~" ? path5.join(os.homedir(), envPath.slice(1)) : envPath;
+    function _resolveHome(envPath2) {
+      return envPath2[0] === "~" ? path5.join(os.homedir(), envPath2.slice(1)) : envPath2;
     }
     function _configVault(options) {
       const debug = Boolean(options && options.debug);
@@ -41191,7 +41191,7 @@ var require_main = __commonJS({
       const parsedAll = {};
       for (const path6 of optionPaths) {
         try {
-          const parsed = DotenvModule.parse(fs6.readFileSync(path6, { encoding }));
+          const parsed = DotenvModule.parse(fs7.readFileSync(path6, { encoding }));
           DotenvModule.populate(parsedAll, parsed, options);
         } catch (e) {
           if (debug) {
@@ -41310,64 +41310,28 @@ var require_main = __commonJS({
   }
 });
 
-// node_modules/dotenv/lib/env-options.js
-var require_env_options = __commonJS({
-  "node_modules/dotenv/lib/env-options.js"(exports2, module2) {
-    var options = {};
-    if (process.env.DOTENV_CONFIG_ENCODING != null) {
-      options.encoding = process.env.DOTENV_CONFIG_ENCODING;
-    }
-    if (process.env.DOTENV_CONFIG_PATH != null) {
-      options.path = process.env.DOTENV_CONFIG_PATH;
-    }
-    if (process.env.DOTENV_CONFIG_QUIET != null) {
-      options.quiet = process.env.DOTENV_CONFIG_QUIET;
-    }
-    if (process.env.DOTENV_CONFIG_DEBUG != null) {
-      options.debug = process.env.DOTENV_CONFIG_DEBUG;
-    }
-    if (process.env.DOTENV_CONFIG_OVERRIDE != null) {
-      options.override = process.env.DOTENV_CONFIG_OVERRIDE;
-    }
-    if (process.env.DOTENV_CONFIG_DOTENV_KEY != null) {
-      options.DOTENV_KEY = process.env.DOTENV_CONFIG_DOTENV_KEY;
-    }
-    module2.exports = options;
+// src/utils/appPaths.js
+var import_path, ROOT_HINT, appRoot, resolveAppPath;
+var init_appPaths = __esm({
+  "src/utils/appPaths.js"() {
+    import_path = __toESM(require("path"), 1);
+    ROOT_HINT = process.env.AGENTFLOW_ROOT;
+    appRoot = process.pkg ? import_path.default.dirname(process.execPath) : ROOT_HINT ? import_path.default.resolve(ROOT_HINT) : process.cwd();
+    resolveAppPath = (...segments) => import_path.default.join(appRoot, ...segments);
   }
 });
 
-// node_modules/dotenv/lib/cli-options.js
-var require_cli_options = __commonJS({
-  "node_modules/dotenv/lib/cli-options.js"(exports2, module2) {
-    var re = /^dotenv_config_(encoding|path|quiet|debug|override|DOTENV_KEY)=(.+)$/;
-    module2.exports = function optionMatcher(args) {
-      const options = args.reduce(function(acc, cur) {
-        const matches = cur.match(re);
-        if (matches) {
-          acc[matches[1]] = matches[2];
-        }
-        return acc;
-      }, {});
-      if (!("quiet" in options)) {
-        options.quiet = "true";
-      }
-      return options;
-    };
-  }
-});
-
-// node_modules/dotenv/config.js
-var init_config = __esm({
-  "node_modules/dotenv/config.js"() {
-    (function() {
-      require_main().config(
-        Object.assign(
-          {},
-          require_env_options(),
-          require_cli_options()(process.argv)
-        )
-      );
-    })();
+// src/utils/loadEnv.js
+var import_fs, import_dotenv, envPath;
+var init_loadEnv = __esm({
+  "src/utils/loadEnv.js"() {
+    import_fs = __toESM(require("fs"), 1);
+    import_dotenv = __toESM(require_main(), 1);
+    init_appPaths();
+    envPath = resolveAppPath(".env");
+    if (import_fs.default.existsSync(envPath)) {
+      import_dotenv.default.config({ path: envPath });
+    }
   }
 });
 
@@ -41487,12 +41451,13 @@ function computeNextTaskIdCounter() {
   const maxId = numericIds.length ? Math.max(...numericIds) : 0;
   taskIdCounter = Math.max(taskIdCounter, maxId + 1);
 }
-var import_fs, import_path, PERSIST_PATH, COMPLETED_NODE_STATUSES, tasks, nodes, taskIdCounter, TaskStore;
+var import_fs2, PERSIST_PATH, COMPLETED_NODE_STATUSES, tasks, nodes, taskIdCounter, TaskStore;
 var init_TaskStore = __esm({
   "src/core/db/TaskStore.js"() {
-    import_fs = __toESM(require("fs"), 1);
-    import_path = __toESM(require("path"), 1);
-    PERSIST_PATH = import_path.default.join(process.cwd(), "task_store.json");
+    import_fs2 = __toESM(require("fs"), 1);
+    init_loadEnv();
+    init_appPaths();
+    PERSIST_PATH = resolveAppPath("task_store.json");
     COMPLETED_NODE_STATUSES = /* @__PURE__ */ new Set(["SUCCESS", "FAILED", "MANUALLY_OVERRIDDEN", "SKIPPED_RETRY"]);
     tasks = /* @__PURE__ */ new Map();
     nodes = /* @__PURE__ */ new Map();
@@ -41602,17 +41567,17 @@ var init_TaskStore = __esm({
           nodes: Array.from(nodes.entries()).map(([id, node]) => [id, serializeNode(id, node)])
         };
         try {
-          import_fs.default.writeFileSync(PERSIST_PATH, JSON.stringify(data, null, 2), "utf-8");
+          import_fs2.default.writeFileSync(PERSIST_PATH, JSON.stringify(data, null, 2), "utf-8");
         } catch (error) {
           console.error("[TaskStore] Failed to save data to disk:", error.message);
         }
       }
       static loadFromDisk() {
-        if (!import_fs.default.existsSync(PERSIST_PATH)) {
+        if (!import_fs2.default.existsSync(PERSIST_PATH)) {
           return;
         }
         try {
-          const raw = import_fs.default.readFileSync(PERSIST_PATH, "utf-8");
+          const raw = import_fs2.default.readFileSync(PERSIST_PATH, "utf-8");
           if (!raw) {
             return;
           }
@@ -41696,8 +41661,8 @@ var init_TaskStore = __esm({
         nodes.clear();
         taskIdCounter = 1;
         try {
-          if (import_fs.default.existsSync(PERSIST_PATH)) {
-            import_fs.default.unlinkSync(PERSIST_PATH);
+          if (import_fs2.default.existsSync(PERSIST_PATH)) {
+            import_fs2.default.unlinkSync(PERSIST_PATH);
           }
         } catch (error) {
           console.error("[TaskStore] Failed to clear persisted state:", error.message);
@@ -42938,7 +42903,7 @@ var require_form_data = __commonJS({
     var http2 = require("http");
     var https2 = require("https");
     var parseUrl = require("url").parse;
-    var fs6 = require("fs");
+    var fs7 = require("fs");
     var Stream = require("stream").Stream;
     var crypto7 = require("crypto");
     var mime = require_mime_types();
@@ -43005,7 +42970,7 @@ var require_form_data = __commonJS({
         if (value.end != void 0 && value.end != Infinity && value.start != void 0) {
           callback(null, value.end + 1 - (value.start ? value.start : 0));
         } else {
-          fs6.stat(value.path, function(err, stat2) {
+          fs7.stat(value.path, function(err, stat2) {
             if (err) {
               callback(err);
               return;
@@ -61461,12 +61426,12 @@ var require_src10 = __commonJS({
     var _GoogleToken_requestToken;
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.GoogleToken = void 0;
-    var fs6 = require("fs");
+    var fs7 = require("fs");
     var gaxios_1 = require_src7();
     var jws = require_jws();
     var path5 = require("path");
     var util_1 = require("util");
-    var readFile = fs6.readFile ? (0, util_1.promisify)(fs6.readFile) : async () => {
+    var readFile = fs7.readFile ? (0, util_1.promisify)(fs7.readFile) : async () => {
       throw new ErrorWithCode("use key rather than keyFile.", "MISSING_CREDENTIALS");
     };
     var GOOGLE_TOKEN_URL = "https://www.googleapis.com/oauth2/v4/token";
@@ -63023,12 +62988,12 @@ var require_filesubjecttokensupplier = __commonJS({
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.FileSubjectTokenSupplier = void 0;
     var util_1 = require("util");
-    var fs6 = require("fs");
-    var readFile = (0, util_1.promisify)((_a = fs6.readFile) !== null && _a !== void 0 ? _a : () => {
+    var fs7 = require("fs");
+    var readFile = (0, util_1.promisify)((_a = fs7.readFile) !== null && _a !== void 0 ? _a : () => {
     });
-    var realpath = (0, util_1.promisify)((_b = fs6.realpath) !== null && _b !== void 0 ? _b : () => {
+    var realpath = (0, util_1.promisify)((_b = fs7.realpath) !== null && _b !== void 0 ? _b : () => {
     });
-    var lstat = (0, util_1.promisify)((_c = fs6.lstat) !== null && _c !== void 0 ? _c : () => {
+    var lstat = (0, util_1.promisify)((_c = fs7.lstat) !== null && _c !== void 0 ? _c : () => {
     });
     var FileSubjectTokenSupplier = class {
       /**
@@ -63746,7 +63711,7 @@ var require_pluggable_auth_handler = __commonJS({
     var pluggable_auth_client_1 = require_pluggable_auth_client();
     var executable_response_1 = require_executable_response();
     var childProcess = require("child_process");
-    var fs6 = require("fs");
+    var fs7 = require("fs");
     var PluggableAuthHandler = class _PluggableAuthHandler {
       /**
        * Instantiates a PluggableAuthHandler instance using the provided
@@ -63816,14 +63781,14 @@ var require_pluggable_auth_handler = __commonJS({
         }
         let filePath;
         try {
-          filePath = await fs6.promises.realpath(this.outputFile);
+          filePath = await fs7.promises.realpath(this.outputFile);
         } catch (_a) {
           return void 0;
         }
-        if (!(await fs6.promises.lstat(filePath)).isFile()) {
+        if (!(await fs7.promises.lstat(filePath)).isFile()) {
           return void 0;
         }
-        const responseString = await fs6.promises.readFile(filePath, {
+        const responseString = await fs7.promises.readFile(filePath, {
           encoding: "utf8"
         });
         if (responseString === "") {
@@ -64244,7 +64209,7 @@ var require_googleauth = __commonJS({
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.GoogleAuth = exports2.GoogleAuthExceptionMessages = exports2.CLOUD_SDK_CLIENT_ID = void 0;
     var child_process_1 = require("child_process");
-    var fs6 = require("fs");
+    var fs7 = require("fs");
     var gcpMetadata = require_src9();
     var os = require("os");
     var path5 = require("path");
@@ -64513,7 +64478,7 @@ var require_googleauth = __commonJS({
         }
         if (location) {
           location = path5.join(location, "gcloud", "application_default_credentials.json");
-          if (!fs6.existsSync(location)) {
+          if (!fs7.existsSync(location)) {
             location = null;
           }
         }
@@ -64534,8 +64499,8 @@ var require_googleauth = __commonJS({
           throw new Error("The file path is invalid.");
         }
         try {
-          filePath = fs6.realpathSync(filePath);
-          if (!fs6.lstatSync(filePath).isFile()) {
+          filePath = fs7.realpathSync(filePath);
+          if (!fs7.lstatSync(filePath).isFile()) {
             throw new Error();
           }
         } catch (err) {
@@ -64544,7 +64509,7 @@ var require_googleauth = __commonJS({
           }
           throw err;
         }
-        const readStream2 = fs6.createReadStream(filePath);
+        const readStream2 = fs7.createReadStream(filePath);
         return this.fromStream(readStream2, options);
       }
       /**
@@ -64931,7 +64896,7 @@ var require_googleauth = __commonJS({
         return this._cacheClientFromJSON(this.jsonContent, this.clientOptions);
       } else if (this.keyFilename) {
         const filePath = path5.resolve(this.keyFilename);
-        const stream4 = fs6.createReadStream(filePath);
+        const stream4 = fs7.createReadStream(filePath);
         return await this.fromStreamAsync(stream4, this.clientOptions);
       } else if (this.apiKey) {
         const client = await this.fromAPIKey(this.apiKey, this.clientOptions);
@@ -77167,15 +77132,15 @@ function stringToBoolean(str) {
   }
   return str.toLowerCase() === "true";
 }
-var import_google_auth_library, import_fs2, import_node_stream, fs2, _defaultBaseGeminiUrl, _defaultBaseVertexUrl, BaseModule, Outcome, Language, HarmCategory, HarmBlockMethod, HarmBlockThreshold, Type, Mode, AuthType, FinishReason, HarmProbability, HarmSeverity, BlockedReason, TrafficType, Modality, MediaResolution, JobState, AdapterSize, FeatureSelectionPreference, Behavior, DynamicRetrievalConfigMode, FunctionCallingConfigMode, UrlRetrievalStatus, SafetyFilterLevel, PersonGeneration, ImagePromptLanguage, MaskReferenceMode, ControlReferenceType, SubjectReferenceType, EditMode, FileState, FileSource, MediaModality, StartSensitivity, EndSensitivity, ActivityHandling, TurnCoverage, FunctionResponseScheduling, Scale, MusicGenerationMode, LiveMusicPlaybackControl, GenerateContentResponse, EmbedContentResponse, GenerateImagesResponse, EditImageResponse, UpscaleImageResponse, ListModelsResponse, DeleteModelResponse, CountTokensResponse, ComputeTokensResponse, ListTuningJobsResponse, DeleteCachedContentResponse, ListCachedContentsResponse, ListFilesResponse, HttpResponse, CreateFileResponse, DeleteFileResponse, LiveServerMessage, LiveMusicServerMessage, jsonSchemaTypeValidator, schemaTypeUnion, PagedItem, Pager, Caches, Chats, Chat, Files, CONTENT_TYPE_HEADER, SERVER_TIMEOUT_HEADER, USER_AGENT_HEADER, GOOGLE_API_CLIENT_HEADER, SDK_VERSION, LIBRARY_LABEL, VERTEX_AI_API_DEFAULT_VERSION, GOOGLE_AI_API_DEFAULT_VERSION, responseLineRE, ClientError, ServerError, ApiClient, MCP_LABEL, LiveMusic, LiveMusicSession, FUNCTION_RESPONSE_REQUIRES_ID, Live, defaultLiveSendClientContentParamerters, Session, DEFAULT_MAX_REMOTE_CALLS, Models, Operations, GOOGLE_API_KEY_HEADER, REQUIRED_VERTEX_AI_SCOPE, NodeAuth, NodeDownloader, NodeWebSocketFactory, NodeWebSocket, Tunings, MAX_CHUNK_SIZE, MAX_RETRY_COUNT, INITIAL_RETRY_DELAY_MS, DELAY_MULTIPLIER, X_GOOG_UPLOAD_STATUS_HEADER_FIELD, NodeUploader, LANGUAGE_LABEL_PREFIX, GoogleGenAI;
+var import_google_auth_library, import_fs3, import_node_stream, fs3, _defaultBaseGeminiUrl, _defaultBaseVertexUrl, BaseModule, Outcome, Language, HarmCategory, HarmBlockMethod, HarmBlockThreshold, Type, Mode, AuthType, FinishReason, HarmProbability, HarmSeverity, BlockedReason, TrafficType, Modality, MediaResolution, JobState, AdapterSize, FeatureSelectionPreference, Behavior, DynamicRetrievalConfigMode, FunctionCallingConfigMode, UrlRetrievalStatus, SafetyFilterLevel, PersonGeneration, ImagePromptLanguage, MaskReferenceMode, ControlReferenceType, SubjectReferenceType, EditMode, FileState, FileSource, MediaModality, StartSensitivity, EndSensitivity, ActivityHandling, TurnCoverage, FunctionResponseScheduling, Scale, MusicGenerationMode, LiveMusicPlaybackControl, GenerateContentResponse, EmbedContentResponse, GenerateImagesResponse, EditImageResponse, UpscaleImageResponse, ListModelsResponse, DeleteModelResponse, CountTokensResponse, ComputeTokensResponse, ListTuningJobsResponse, DeleteCachedContentResponse, ListCachedContentsResponse, ListFilesResponse, HttpResponse, CreateFileResponse, DeleteFileResponse, LiveServerMessage, LiveMusicServerMessage, jsonSchemaTypeValidator, schemaTypeUnion, PagedItem, Pager, Caches, Chats, Chat, Files, CONTENT_TYPE_HEADER, SERVER_TIMEOUT_HEADER, USER_AGENT_HEADER, GOOGLE_API_CLIENT_HEADER, SDK_VERSION, LIBRARY_LABEL, VERTEX_AI_API_DEFAULT_VERSION, GOOGLE_AI_API_DEFAULT_VERSION, responseLineRE, ClientError, ServerError, ApiClient, MCP_LABEL, LiveMusic, LiveMusicSession, FUNCTION_RESPONSE_REQUIRES_ID, Live, defaultLiveSendClientContentParamerters, Session, DEFAULT_MAX_REMOTE_CALLS, Models, Operations, GOOGLE_API_KEY_HEADER, REQUIRED_VERTEX_AI_SCOPE, NodeAuth, NodeDownloader, NodeWebSocketFactory, NodeWebSocket, Tunings, MAX_CHUNK_SIZE, MAX_RETRY_COUNT, INITIAL_RETRY_DELAY_MS, DELAY_MULTIPLIER, X_GOOG_UPLOAD_STATUS_HEADER_FIELD, NodeUploader, LANGUAGE_LABEL_PREFIX, GoogleGenAI;
 var init_node2 = __esm({
   "node_modules/@google/genai/dist/node/index.mjs"() {
     init_zod();
     import_google_auth_library = __toESM(require_src11(), 1);
-    import_fs2 = require("fs");
+    import_fs3 = require("fs");
     import_node_stream = require("node:stream");
     init_wrapper();
-    fs2 = __toESM(require("fs/promises"), 1);
+    fs3 = __toESM(require("fs/promises"), 1);
     _defaultBaseGeminiUrl = void 0;
     _defaultBaseVertexUrl = void 0;
     BaseModule = class {
@@ -80877,10 +80842,10 @@ var init_node2 = __esm({
         if (params.downloadPath) {
           const response = await downloadFile(params, apiClient);
           if (response instanceof HttpResponse) {
-            const writer = (0, import_fs2.createWriteStream)(params.downloadPath);
+            const writer = (0, import_fs3.createWriteStream)(params.downloadPath);
             import_node_stream.Readable.fromWeb(response.responseInternal.body).pipe(writer);
           } else {
-            (0, import_fs2.writeFile)(params.downloadPath, response, { encoding: "base64" }, (error) => {
+            (0, import_fs3.writeFile)(params.downloadPath, response, { encoding: "base64" }, (error) => {
               if (error) {
                 throw new Error(`Failed to write file to ${params.downloadPath}: ${error}`);
               }
@@ -81121,7 +81086,7 @@ var init_node2 = __esm({
       async stat(file) {
         const fileStat = { size: 0, type: void 0 };
         if (typeof file === "string") {
-          const originalStat = await fs2.stat(file);
+          const originalStat = await fs3.stat(file);
           fileStat.size = originalStat.size;
           fileStat.type = this.inferMimeType(file);
           return fileStat;
@@ -81230,7 +81195,7 @@ var init_node2 = __esm({
         let uploadCommand = "upload";
         let fileHandle;
         try {
-          fileHandle = await fs2.open(file, "r");
+          fileHandle = await fs3.open(file, "r");
           if (!fileHandle) {
             throw new Error(`Failed to open file`);
           }
@@ -81355,13 +81320,14 @@ var init_node2 = __esm({
 });
 
 // src/core/ProviderManager.js
-var import_fs3, import_path2, getMockMode, GEMINI_API_KEY, GEMINI_API_BASE_URL, getGeminiClient, MAX_RETRIES, delay, logAxiosError, RESULTS_DIR, PLACEHOLDER_PIXEL_BASE64, ensureResultsDir, extensionFromMimeType, buildImageFileName, writeImageFile, createPlaceholderImage, sendRequestWithRetries, invokeImageModel, ProviderManager;
+var import_fs4, import_path2, getMockMode, GEMINI_API_KEY, GEMINI_API_BASE_URL, getGeminiClient, MAX_RETRIES, delay, logAxiosError, RESULTS_DIR, PLACEHOLDER_PIXEL_BASE64, ensureResultsDir, extensionFromMimeType, buildImageFileName, writeImageFile, createPlaceholderImage, sendRequestWithRetries, invokeImageModel, ProviderManager;
 var init_ProviderManager = __esm({
   "src/core/ProviderManager.js"() {
     init_axios2();
-    import_fs3 = require("fs");
+    import_fs4 = require("fs");
     import_path2 = __toESM(require("path"), 1);
-    init_config();
+    init_loadEnv();
+    init_appPaths();
     init_node2();
     getMockMode = () => process.env.MOCK_MODE === "true";
     GEMINI_API_KEY = process.env.GEMINI_API_KEY;
@@ -81384,10 +81350,10 @@ Error Status: ${error.response.status}`
         console.error(`${contextLabel} error:`, error.message);
       }
     };
-    RESULTS_DIR = import_path2.default.join(process.cwd(), "results");
+    RESULTS_DIR = resolveAppPath("results");
     PLACEHOLDER_PIXEL_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==";
     ensureResultsDir = async () => {
-      await import_fs3.promises.mkdir(RESULTS_DIR, { recursive: true });
+      await import_fs4.promises.mkdir(RESULTS_DIR, { recursive: true });
     };
     extensionFromMimeType = (mimeType) => mimeType?.toLowerCase().includes("jpeg") ? "jpg" : "png";
     buildImageFileName = (model, mimeType = "image/png") => `${(model || "imagen").replace(/[^a-z0-9]/gi, "_")}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${extensionFromMimeType(mimeType)}`;
@@ -81395,7 +81361,7 @@ Error Status: ${error.response.status}`
       await ensureResultsDir();
       const fileName = buildImageFileName(model, mimeType);
       const absolutePath = import_path2.default.join(RESULTS_DIR, fileName);
-      await import_fs3.promises.writeFile(absolutePath, buffer);
+      await import_fs4.promises.writeFile(absolutePath, buffer);
       const relativePath = import_path2.default.posix.join("results", fileName);
       return { absolutePath, relativePath, mimeType };
     };
@@ -81504,17 +81470,19 @@ Error Status: ${error.response.status}`
 });
 
 // src/core/Logger.js
-var import_fs4, import_path3, LOG_DIR, Logger;
+var import_fs5, import_path3, LOG_DIR, Logger;
 var init_Logger = __esm({
   "src/core/Logger.js"() {
-    import_fs4 = __toESM(require("fs"), 1);
+    import_fs5 = __toESM(require("fs"), 1);
     import_path3 = __toESM(require("path"), 1);
-    LOG_DIR = "logs";
+    init_loadEnv();
+    init_appPaths();
+    LOG_DIR = resolveAppPath("logs");
     Logger = class {
       constructor(taskId) {
         this.logFile = import_path3.default.join(LOG_DIR, `${taskId}.log.jsonl`);
-        if (!import_fs4.default.existsSync(LOG_DIR)) {
-          import_fs4.default.mkdirSync(LOG_DIR, { recursive: true });
+        if (!import_fs5.default.existsSync(LOG_DIR)) {
+          import_fs5.default.mkdirSync(LOG_DIR, { recursive: true });
         }
       }
       logStep(nodeId, event, details = {}) {
@@ -81525,7 +81493,7 @@ var init_Logger = __esm({
           ...details
         };
         console.log(`[${nodeId}][${event}]`, details.message || "");
-        import_fs4.default.appendFileSync(this.logFile, JSON.stringify(entry) + "\n");
+        import_fs5.default.appendFileSync(this.logFile, JSON.stringify(entry) + "\n");
       }
     };
   }
@@ -81581,6 +81549,7 @@ __export(WriterAgent_exports, {
 var DEFAULT_MODEL, WriterAgent;
 var init_WriterAgent = __esm({
   "src/agents/WriterAgent.js"() {
+    init_loadEnv();
     init_ProviderManager();
     init_Logger();
     init_TaskStore();
@@ -81632,6 +81601,7 @@ __export(ImageAgent_exports, {
 var IMAGE_MODEL, ImageAgent;
 var init_ImageAgent = __esm({
   "src/agents/ImageAgent.js"() {
+    init_loadEnv();
     init_ProviderManager();
     init_Logger();
     init_TaskStore();
@@ -81723,6 +81693,7 @@ function cleanJsonString(rawString) {
 var VIDEO_MODEL, VideoAgent;
 var init_VideoAgent = __esm({
   "src/agents/VideoAgent.js"() {
+    init_loadEnv();
     init_ProviderManager();
     init_Logger();
     init_TaskStore();
@@ -81914,6 +81885,7 @@ function detectToneIssue(content, expectedTone) {
 var forcedFailureConsumed, FORMAL_MARKERS, ENTHUSIASTIC_MARKERS, CASUAL_MARKERS, FRIENDLY_MARKERS, PLAYFUL_MARKERS, TONE_ALIASES, GuardAgent;
 var init_GuardAgent = __esm({
   "src/agents/GuardAgent.js"() {
+    init_loadEnv();
     init_Logger();
     init_TaskStore();
     forcedFailureConsumed = false;
@@ -82071,6 +82043,7 @@ function clone2(value) {
 var RetryAgent;
 var init_RetryAgent = __esm({
   "src/agents/RetryAgent.js"() {
+    init_loadEnv();
     init_ProviderManager();
     init_Logger();
     init_TaskStore();
@@ -82156,6 +82129,7 @@ __export(HumanGateAgent_exports, {
 var HumanGateAgent;
 var init_HumanGateAgent = __esm({
   "src/agents/HumanGateAgent.js"() {
+    init_loadEnv();
     init_Logger();
     init_TaskStore();
     HumanGateAgent = class {
@@ -82242,6 +82216,7 @@ function formatInstructionsToText(formatData) {
 var ANALYSIS_MODEL, ProductAnalysisAgent;
 var init_ProductAnalysisAgent = __esm({
   "src/agents/ProductAnalysisAgent.js"() {
+    init_loadEnv();
     init_ProviderManager();
     init_Logger();
     init_TaskStore();
@@ -82391,6 +82366,7 @@ function normalizeSchedule(schedule) {
 var STRATEGY_MODEL, StrategyAgent;
 var init_StrategyAgent = __esm({
   "src/agents/StrategyAgent.js"() {
+    init_loadEnv();
     init_ProviderManager();
     init_Logger();
     init_TaskStore();
@@ -82609,6 +82585,7 @@ function buildMockReview(schedule) {
 var REVIEW_MODEL, StrategyReviewAgent;
 var init_StrategyReviewAgent = __esm({
   "src/agents/StrategyReviewAgent.js"() {
+    init_loadEnv();
     init_ProviderManager();
     init_Logger();
     init_TaskStore();
@@ -82722,9 +82699,10 @@ var import_dist = __toESM(require_dist2(), 1);
 var { Server, Namespace, Socket } = import_dist.default;
 
 // src/server.mjs
-init_config();
-var import_fs5 = __toESM(require("fs"), 1);
+var import_fs6 = __toESM(require("fs"), 1);
 var import_path4 = __toESM(require("path"), 1);
+init_loadEnv();
+init_appPaths();
 
 // src/agents/MasterAgent.js
 init_TaskStore();
@@ -82947,21 +82925,21 @@ var app = (0, import_express.default)();
 var httpServer = (0, import_http3.createServer)(app);
 var io2 = new Server(httpServer);
 var PORT = process.env.PORT || 3e3;
-var DAG_PATH = import_path4.default.join(process.cwd(), "plans", "dag.json");
-var PUBLIC_DIR = import_path4.default.join(process.cwd(), "public");
-var RESULTS_DIR2 = import_path4.default.join(process.cwd(), "results");
-var LOGS_DIR = import_path4.default.join(process.cwd(), "logs");
+var DAG_PATH = resolveAppPath("plans", "dag.json");
+var PUBLIC_DIR = resolveAppPath("public");
+var RESULTS_DIR2 = resolveAppPath("results");
+var LOGS_DIR = resolveAppPath("logs");
 var dagTemplate = "{}";
 try {
-  dagTemplate = import_fs5.default.readFileSync(DAG_PATH, "utf-8");
+  dagTemplate = import_fs6.default.readFileSync(DAG_PATH, "utf-8");
 } catch (error) {
   console.warn(`Failed to load DAG template at ${DAG_PATH}:`, error.message);
 }
 app.use(import_express.default.json({ limit: "50mb" }));
 app.use(import_express.default.urlencoded({ extended: true, limit: "50mb" }));
 app.use(import_express.default.static(PUBLIC_DIR));
-if (!import_fs5.default.existsSync(RESULTS_DIR2)) {
-  import_fs5.default.mkdirSync(RESULTS_DIR2, { recursive: true });
+if (!import_fs6.default.existsSync(RESULTS_DIR2)) {
+  import_fs6.default.mkdirSync(RESULTS_DIR2, { recursive: true });
 }
 app.use("/results", import_express.default.static(RESULTS_DIR2));
 TaskStore.loadFromDisk();
@@ -83341,11 +83319,11 @@ app.post("/api/tasks/:taskId/schedule/generate/:index", async (req, res) => {
 app.get("/api/logs/:taskId", (req, res) => {
   const { taskId } = req.params;
   const logPath = import_path4.default.join(LOGS_DIR, `${taskId}.log.jsonl`);
-  if (!import_fs5.default.existsSync(logPath)) {
+  if (!import_fs6.default.existsSync(logPath)) {
     return res.status(404).send("Log file not found.");
   }
   try {
-    const content = import_fs5.default.readFileSync(logPath, "utf-8");
+    const content = import_fs6.default.readFileSync(logPath, "utf-8");
     res.type("text/plain").send(content);
   } catch (error) {
     console.error(`Failed to read log for ${taskId}:`, error);
@@ -83354,7 +83332,7 @@ app.get("/api/logs/:taskId", (req, res) => {
 });
 app.get("/api/logs/:taskId/:nodeId", (req, res) => {
   const logPath = import_path4.default.join(LOGS_DIR, `${req.params.taskId}.log.jsonl`);
-  if (!import_fs5.default.existsSync(logPath)) {
+  if (!import_fs6.default.existsSync(logPath)) {
     return res.status(404).send("Log file not found.");
   }
   res.sendFile(logPath);
@@ -83444,16 +83422,16 @@ app.delete("/api/tasks/:taskId", (req, res) => {
   }
   const logPath = import_path4.default.join(LOGS_DIR, `${taskId}.log.jsonl`);
   try {
-    if (import_fs5.default.existsSync(logPath)) {
-      import_fs5.default.unlinkSync(logPath);
+    if (import_fs6.default.existsSync(logPath)) {
+      import_fs6.default.unlinkSync(logPath);
     }
   } catch (error) {
     console.warn(`[Server] Failed to remove log file for ${taskId}:`, error.message);
   }
   const taskResultsDir = import_path4.default.join(RESULTS_DIR2, taskId);
   try {
-    if (import_fs5.default.existsSync(taskResultsDir)) {
-      import_fs5.default.rmSync(taskResultsDir, { recursive: true, force: true });
+    if (import_fs6.default.existsSync(taskResultsDir)) {
+      import_fs6.default.rmSync(taskResultsDir, { recursive: true, force: true });
     }
   } catch (error) {
     console.warn(`[Server] Failed to clean results for ${taskId}:`, error.message);
