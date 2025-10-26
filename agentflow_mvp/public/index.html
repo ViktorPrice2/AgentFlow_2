@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>AgentFlow 2.0 Панель Управления (150/100)</title>
+    <title>AgentFlow 2.0: Интеллектуальная Панель Управления</title>
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -59,9 +59,9 @@
         .schedule-table th:nth-child(5), .schedule-table td:nth-child(5) { width: 15%; }
         .schedule-table th:nth-child(6), .schedule-table td:nth-child(6) { width: 13%; }
         .schedule-table th:nth-child(7), .schedule-table td:nth-child(7) { width: 12%; }
-        .schedule-table th:nth-child(8), .schedule-table td:nth-child(8) { width: 20%; }
-        .schedule-table th:nth-child(9), .schedule-table td:nth-child(9) { width: 2.5%; }
-        .schedule-table th:nth-child(10), .schedule-table td:nth-child(10) { width: 2.5%; }
+        .schedule-table th:nth-child(8), .schedule-table td:nth-child(8) { width: 18%; } /* Уменьшено для освобождения места */
+        .schedule-table th:nth-child(9), .schedule-table td:nth-child(9) { width: 7%; min-width: 70px; } /* Увеличено и добавлено min-width */
+        .schedule-table th:nth-child(10), .schedule-table td:nth-child(10) { width: 7%; min-width: 70px; } /* Увеличено и добавлено min-width */
         .schedule-table input { width: 100%; max-width: 100%; box-sizing: border-box; padding: 6px; border-radius: 4px; border: 1px solid #ccd4dd; }
         .schedule-table textarea { width: 100%; max-width: 100%; min-height: 90px; resize: vertical; box-sizing: border-box; padding: 6px; border-radius: 4px; border: 1px solid #ccd4dd; font-family: inherit; }
         .schedule-table input[type="number"] { min-width: 70px; }
@@ -81,7 +81,7 @@
         .schedule-value { display: block; white-space: pre-wrap; word-break: break-word; line-height: 1.35; }
         .schedule-table textarea.inline-textarea { min-height: 60px; resize: vertical; }
         .schedule-table textarea.inline-textarea.small { min-height: 40px; }
-        .schedule-table input.metrics-input { width: 100%; text-align: center; }
+        .schedule-table input.metrics-input { width: 100%; text-align: center; font-size: 0.9em; padding: 4px; } /* Уменьшен шрифт и отступы */
         .schedule-table .field-stack { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
         .chart-wrapper { margin-top: 20px; height: 240px; }
         .chart-wrapper canvas { width: 100% !important; height: 100% !important; }
@@ -92,33 +92,33 @@
 </head>
 <body>
     <div class="container">
-        <h1>AgentFlow 2.0 — Панель Управления (150/100)</h1>
-        <p>Real-Time мониторинг с помощью WebSockets и визуализация DAG через vis-network.</p>
+        <h1>AgentFlow 2.0: Интеллектуальная Панель Управления</h1>
+        <p>Мониторинг и управление задачами на базе ИИ в реальном времени. Визуализация рабочего процесса (DAG).</p>
 
         <div class="task-form">
-            <h2>Запустить новую задачу</h2>
-            <input type="text" id="taskName" value="Финальный запуск" required placeholder="Имя кампании">
-            <input type="text" id="taskTopic" value="Новый продукт для здоровья" required placeholder="Тема">
+            <h2>Создать новую задачу ИИ</h2>
+            <input type="text" id="taskName" value="Запуск нового продукта" required placeholder="Название проекта/кампании">
+            <input type="text" id="taskTopic" value="Разработка маркетинговой стратегии" required placeholder="Основная тема задачи">
             <select id="taskTone">
-                <option value="enthusiastic">Энтузиастичный</option>
-                <option value="formal">Формальный</option>
+                <option value="enthusiastic">Восторженный</option>
+                <option value="formal">Официальный</option>
                 <option value="friendly">Дружелюбный</option>
             </select>
             <div class="media-options">
                 <label class="checkbox">
                     <input type="checkbox" id="taskGenerateImage" checked>
-                    <span>Планировать изображение (Prompt)</span>
+                    <span>Сгенерировать изображение (Промпт)</span>
                 </label>
                 <label class="checkbox">
                     <input type="checkbox" id="taskGenerateVideo">
-                    <span>Планировать видео (Storyboard)</span>
+                    <span>Сгенерировать видео (Сценарий)</span>
                 </label>
             </div>
             <div class="format-section">
-                <h3>Структура контента</h3>
+                <h3>Параметры генерации контента</h3>
                 <div class="format-grid">
                     <div class="format-field">
-                        <label>Длина (слов)
+                        <label>Длина контента (слова)
                             <input type="text" id="formatLength" placeholder="300 слов">
                         </label>
                     </div>
@@ -128,19 +128,19 @@
                         </label>
                     </div>
                     <div class="format-field">
-                        <label>Канал фокуса
+                        <label>Канал распространения
                             <input type="text" id="formatChannel" placeholder="Instagram, YouTube...">
                         </label>
                     </div>
                     <div class="format-field">
-                        <label>CTA / Цель
+                        <label>Призыв к действию (CTA)
                             <input type="text" id="formatCTA" placeholder="Записаться на демо">
                         </label>
                     </div>
                 </div>
-                <textarea id="formatNotes" class="format-notes" placeholder="Дополнительные требования: стиль, хэштеги, частота, ограничения..."></textarea>
+                <textarea id="formatNotes" class="format-notes" placeholder="Дополнительные инструкции: стиль, ключевые слова, ограничения..."></textarea>
             </div>
-            <button id="startTaskBtn">Запустить AgentFlow</button>
+            <button id="startTaskBtn">Запустить ИИ-Агентов</button>
         </div>
 
         <div class="flex-container">

@@ -71,6 +71,7 @@ export class MasterAgent {
 
     let completed = false;
     while (!completed) {
+      await new Promise(resolve => setTimeout(resolve, 50)); // Освобождаем Event Loop
       const readyNodes = TaskStore.getReadyNodes(taskId).filter(node => node.status !== 'PAUSED');
 
       for (const node of readyNodes) {

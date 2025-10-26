@@ -82809,6 +82809,7 @@ var MasterAgent = class _MasterAgent {
     }
     let completed = false;
     while (!completed) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
       const readyNodes = TaskStore.getReadyNodes(taskId).filter((node) => node.status !== "PAUSED");
       for (const node of readyNodes) {
         console.log(`[Scheduler] Dispatching ${node.agent_type} for ${node.id}`);
@@ -83460,15 +83461,18 @@ app.delete("/api/tasks/:taskId", (req, res) => {
   io2.emit("task-removed", { taskId });
   res.json({ success: true, message: `Task ${taskId} deleted.` });
 });
-httpServer.listen(PORT, async () => {
-  console.log(`
+async function startApplication() {
+  httpServer.listen(PORT, () => {
+    console.log(`
 AgentFlow Web UI running at http://localhost:${PORT}`);
+  });
   try {
     await MasterAgent.resumeTasks(broadcastTaskUpdate);
   } catch (error) {
     console.error("[Server] Failed to resume persisted tasks:", error);
   }
-});
+}
+startApplication();
 /*! Bundled license information:
 
 depd/index.js:

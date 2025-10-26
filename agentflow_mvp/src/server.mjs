@@ -652,11 +652,16 @@ app.delete('/api/tasks/:taskId', (req, res) => {
   res.json({ success: true, message: `Task ${taskId} deleted.` });
 });
 
-httpServer.listen(PORT, async () => {
-  console.log(`\nAgentFlow Web UI running at http://localhost:${PORT}`);
+async function startApplication() {
+  httpServer.listen(PORT, () => {
+    console.log(`\nAgentFlow Web UI running at http://localhost:${PORT}`);
+  });
+
   try {
     await MasterAgent.resumeTasks(broadcastTaskUpdate);
   } catch (error) {
     console.error('[Server] Failed to resume persisted tasks:', error);
   }
-});
+}
+
+startApplication();
