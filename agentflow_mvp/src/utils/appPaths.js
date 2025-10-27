@@ -1,17 +1,65 @@
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
 const ROOT_HINT = process.env.AGENTFLOW_ROOT;
+
+let moduleDir = null;
+try {
+  const currentFile = fileURLToPath(import.meta.url);
+  moduleDir = path.dirname(currentFile);
+} catch (error) {
+  moduleDir = null;
+}
+
+const discoverModuleRoot = () => {
+  const candidates = [];
+
+  if (moduleDir) {
+    candidates.push(path.resolve(moduleDir, '..'));
+    candidates.push(path.resolve(moduleDir, '..', '..'));
+  }
+
+  const cjsDir = typeof __dirname === 'string' ? path.resolve(__dirname) : null;
+  if (cjsDir) {
+    candidates.push(path.resolve(cjsDir));
+    candidates.push(path.resolve(cjsDir, '..'));
+  }
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const publicDir = path.join(candidate, 'public');
+    const plansDir = path.join(candidate, 'plans');
+    if (fs.existsSync(publicDir) && fs.existsSync(plansDir)) {
+      return candidate;
+    }
+  }
+
+  return candidates.find(Boolean) || null;
+};
+
+const MODULE_ROOT = discoverModuleRoot();
+const DEFAULT_ROOT = MODULE_ROOT || path.resolve(process.cwd());
+
 const EXEC_ROOT = process.pkg
   ? path.dirname(process.execPath)
   : ROOT_HINT
     ? path.resolve(ROOT_HINT)
-    : process.cwd();
+    : DEFAULT_ROOT;
 
 const SNAPSHOT_ROOT =
   process.pkg && process.pkg.entrypoint
     ? path.dirname(process.pkg.defaultEntrypoint || process.pkg.entrypoint)
-    : EXEC_ROOT;
+    : MODULE_ROOT || EXEC_ROOT;
+
+const addCandidate = (list, candidate) => {
+  if (!candidate) return list;
+  const resolved = path.resolve(candidate);
+  if (!list.some(item => item === resolved)) {
+    list.push(resolved);
+  }
+  return list;
+};
 
 const pickWritableRoot = () => {
   const explicit = process.env.AGENTFLOW_DATA_DIR;
@@ -38,7 +86,20 @@ const pickWritableRoot = () => {
 };
 
 const DATA_ROOT = pickWritableRoot();
-const ASSET_ROOTS = [...new Set([EXEC_ROOT, SNAPSHOT_ROOT])];
+
+const buildAssetRoots = () => {
+  const roots = [];
+  addCandidate(roots, EXEC_ROOT);
+  addCandidate(roots, SNAPSHOT_ROOT);
+  addCandidate(roots, ROOT_HINT);
+  addCandidate(roots, MODULE_ROOT);
+  if (!process.pkg) {
+    addCandidate(roots, process.cwd());
+  }
+  return roots;
+};
+
+const ASSET_ROOTS = buildAssetRoots();
 const DEBUG_PATHS = process.env.AGENTFLOW_DEBUG_PATHS === '1';
 
 function resolveFromAssetRoots(segments) {
@@ -82,16 +143,19 @@ if (DEBUG_PATHS) {
       JSON.stringify({ entrypoint, defaultEntrypoint, mountpoint }, null, 2)
     );
   }
-  try {
-    const snapshotListing = fs.readdirSync(SNAPSHOT_ROOT);
-    console.log('[AgentFlow][Paths][snapshot]', SNAPSHOT_ROOT, snapshotListing);
-  } catch (error) {
-    console.log('[AgentFlow][Paths][snapshot]', SNAPSHOT_ROOT, 'unavailable:', error.message);
-  }
-  try {
-    const rootListing = fs.readdirSync(path.dirname(SNAPSHOT_ROOT));
-    console.log('[AgentFlow][Paths][snapshot-root]', path.dirname(SNAPSHOT_ROOT), rootListing);
-  } catch (error) {
-    console.log('[AgentFlow][Paths][snapshot-root]', path.dirname(SNAPSHOT_ROOT), 'unavailable:', error.message);
+  if (SNAPSHOT_ROOT) {
+    try {
+      const snapshotListing = fs.readdirSync(SNAPSHOT_ROOT);
+      console.log('[AgentFlow][Paths][snapshot]', SNAPSHOT_ROOT, snapshotListing);
+    } catch (error) {
+      console.log('[AgentFlow][Paths][snapshot]', SNAPSHOT_ROOT, 'unavailable:', error.message);
+    }
+    try {
+      const parentDir = path.dirname(SNAPSHOT_ROOT);
+      const rootListing = fs.readdirSync(parentDir);
+      console.log('[AgentFlow][Paths][snapshot-root]', parentDir, rootListing);
+    } catch (error) {
+      console.log('[AgentFlow][Paths][snapshot-root]', path.dirname(SNAPSHOT_ROOT), 'unavailable:', error.message);
+    }
   }
 }

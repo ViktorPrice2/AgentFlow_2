@@ -4,10 +4,30 @@
 const path = require('path');
 const fs = require('fs');
 
+const ROOT_HINT = process.env.AGENTFLOW_ROOT;
+
+const resolveBaseDir = () => {
+    if (ROOT_HINT) {
+        return path.resolve(ROOT_HINT);
+    }
+    if (process.pkg) {
+        return path.dirname(process.execPath);
+    }
+    return path.resolve(__dirname, '..');
+};
+
+const BASE_DIR = resolveBaseDir();
+
+try {
+    process.chdir(BASE_DIR);
+} catch (error) {
+    console.warn('Could not change working directory:', error.message);
+}
+
 // 1. Загрузка dotenv (CommonJS-стиль)
 try {
     const dotenv = require('dotenv');
-    const envPath = path.resolve(process.cwd(), '.env');
+    const envPath = path.join(BASE_DIR, '.env');
     if (fs.existsSync(envPath)) {
         dotenv.config({ path: envPath });
     }
