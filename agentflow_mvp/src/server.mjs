@@ -4,7 +4,7 @@ import { Server as SocketIoServer } from 'socket.io';
 import fs from 'fs';
 import path from 'path';
 import './utils/loadEnv.js';
-import { resolveAppPath } from './utils/appPaths.js';
+import { resolveAppPath, resolveWritablePath } from './utils/appPaths.js';
 import { MasterAgent } from './agents/MasterAgent.js';
 import { TaskStore } from './core/db/TaskStore.js';
 import { Logger } from './core/Logger.js';
@@ -16,8 +16,8 @@ const PORT = process.env.PORT || 3000;
 
 const DAG_PATH = resolveAppPath('plans', 'dag.json');
 const PUBLIC_DIR = resolveAppPath('public');
-const RESULTS_DIR = resolveAppPath('results');
-const LOGS_DIR = resolveAppPath('logs');
+const RESULTS_DIR = resolveWritablePath('results');
+const LOGS_DIR = resolveWritablePath('logs');
 
 let dagTemplate = '{}';
 try {

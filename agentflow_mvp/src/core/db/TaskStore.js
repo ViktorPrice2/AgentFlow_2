@@ -1,12 +1,13 @@
 import fs from 'fs';
 import path from 'path';
 import '../../utils/loadEnv.js';
-import { resolveAppPath } from '../../utils/appPaths.js';
+import { resolveWritablePath } from '../../utils/appPaths.js';
 
 // src/core/db/TaskStore.js
 
-const PERSIST_PATH = resolveAppPath('task_store.json');
+const PERSIST_PATH = resolveWritablePath('task_store.json');
 const COMPLETED_NODE_STATUSES = new Set(['SUCCESS', 'FAILED', 'MANUALLY_OVERRIDDEN', 'SKIPPED_RETRY']);
+const BLOCKING_NODE_STATUSES = new Set(['FAILED', 'SKIPPED_RETRY']);
 
 const tasks = new Map();
 const nodes = new Map(); // nodes и tasks должны быть доступны через TaskStore.get...
@@ -113,6 +114,44 @@ function normalizeNode(nodeId, node) {
   };
 }
 
+function propagateDependencyFailures(taskId) {
+  const task = tasks.get(taskId);
+  if (!task) {
+    return false;
+  }
+
+  const taskNodeIds = Array.isArray(task.nodes) ? task.nodes : [];
+  let changed = false;
+  let iterationChanged = true;
+
+  while (iterationChanged) {
+    iterationChanged = false;
+
+    for (const nodeId of taskNodeIds) {
+      const node = nodes.get(nodeId);
+      if (!node || node.status !== 'PLANNED') {
+        continue;
+      }
+
+      const isBlocked = node.dependsOn.some(depId => {
+        const depNode = nodes.get(depId);
+        if (!depNode) {
+          return false;
+        }
+        return BLOCKING_NODE_STATUSES.has(depNode.status);
+      });
+
+      if (isBlocked) {
+        node.status = 'SKIPPED_RETRY';
+        iterationChanged = true;
+        changed = true;
+      }
+    }
+  }
+
+  return changed;
+}
+
 function serializeNode(nodeId, node) {
   return normalizeNode(nodeId, node);
 }
@@ -120,15 +159,18 @@ function serializeNode(nodeId, node) {
 function ensureTaskStatusConsistency(taskId) {
   const task = tasks.get(taskId);
   if (!task) {
-    return;
+    return false;
   }
+
+  let changed = propagateDependencyFailures(taskId);
 
   const nodeEntries = task.nodes.map(id => nodes.get(id)).filter(Boolean);
   if (nodeEntries.length === 0) {
     if (task.status !== 'CREATED') {
       task.status = 'CREATED';
+      changed = true;
     }
-    return;
+    return changed;
   }
 
   const allCompleted = nodeEntries.every(node => COMPLETED_NODE_STATUSES.has(node.status));
@@ -138,23 +180,39 @@ function ensureTaskStatusConsistency(taskId) {
   const anyPaused = nodeEntries.some(node => node.status === 'PAUSED');
 
   if (allCompleted) {
-    task.status = anyFailed ? 'FAILED' : 'COMPLETED';
-    return;
+    const finalStatus = anyFailed ? 'FAILED' : 'COMPLETED';
+    if (task.status !== finalStatus) {
+      task.status = finalStatus;
+      changed = true;
+    }
+    return changed;
   }
 
   if (anyPaused && !anyRunning) {
-    task.status = 'PAUSED';
-    return;
+    if (task.status !== 'PAUSED') {
+      task.status = 'PAUSED';
+      changed = true;
+    }
+    return changed;
   }
 
   if (anyRunning) {
-    task.status = 'RUNNING';
-    return;
+    if (task.status !== 'RUNNING') {
+      task.status = 'RUNNING';
+      changed = true;
+    }
+    return changed;
   }
 
   if (anyPlanned) {
-    task.status = task.status === 'CREATED' ? 'CREATED' : 'RUNNING';
+    const desiredStatus = task.status === 'CREATED' ? 'CREATED' : 'RUNNING';
+    if (task.status !== desiredStatus) {
+      task.status = desiredStatus;
+      changed = true;
+    }
   }
+
+  return changed;
 }
 
 function computeNextTaskIdCounter() {
@@ -326,14 +384,21 @@ export class TaskStore {
         nodes.set(nodeId, normalizedNode);
       }
 
+      let storeDirty = false;
       for (const [taskId, task] of tasks.entries()) {
         task.nodes = task.nodes.filter(nodeId => nodes.has(nodeId));
-        ensureTaskStatusConsistency(taskId);
+        if (ensureTaskStatusConsistency(taskId)) {
+          storeDirty = true;
+        }
       }
 
       const persistedCounter = Number.parseInt(parsed.taskIdCounter, 10);
       taskIdCounter = Number.isFinite(persistedCounter) && persistedCounter > 0 ? persistedCounter : 1;
       computeNextTaskIdCounter();
+
+      if (storeDirty) {
+        TaskStore.saveToDisk();
+      }
 
       console.log(`[TaskStore] Loaded ${tasks.size} tasks (${nodes.size} nodes) from disk.`);
     } catch (error) {
