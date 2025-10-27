@@ -1,0 +1,2048 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgentFlow 2.0 — Панель Управления</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.min.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-page: #f3f5fb;
+            --bg-card: #ffffff;
+            --bg-card-alt: #f6f8ff;
+            --bg-soft: #eef2ff;
+            --bg-input: #edf2ff;
+            --border-color: rgba(148, 163, 184, 0.4);
+            --border-strong: rgba(100, 116, 139, 0.65);
+            --accent-blue: #2563eb;
+            --accent-cyan: #0ea5e9;
+            --accent-purple: #8b5cf6;
+            --text-main: #0f172a;
+            --text-secondary: #1f2937;
+            --text-light: #334155;
+            --text-muted: #475569;
+            --text-soft: #6b7280;
+            --success: #059669;
+            --warning: #d97706;
+            --danger: #dc2626;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 32px;
+            background: linear-gradient(180deg, rgba(226, 232, 240, 0.6) 0%, rgba(243, 244, 255, 0.8) 35%, #ffffff 100%);
+            color: var(--text-secondary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 28px;
+        }
+
+        .card {
+            position: relative;
+            background: var(--bg-card);
+            border-radius: 18px;
+            padding: 28px;
+            border: 1px solid rgba(148, 163, 184, 0.28);
+            box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+        }
+
+        .page-hero {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 24px;
+            align-items: center;
+        }
+
+        .page-title {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .page-title-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .settings-trigger {
+            padding: 6px 12px;
+            white-space: nowrap;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 2.4rem;
+            color: var(--text-main);
+            font-weight: 700;
+            letter-spacing: -0.01em;
+        }
+
+        .page-subtitle {
+            margin: 0;
+            color: var(--text-muted);
+            font-size: 1.05rem;
+            line-height: 1.5;
+        }
+
+        .hero-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .meta-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 999px;
+            background: rgba(59, 130, 246, 0.16);
+            color: var(--text-main);
+            font-size: 0.9rem;
+            letter-spacing: 0.02em;
+        }
+
+        .meta-chip svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        .hero-illustration {
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .orbital {
+            width: 180px;
+            height: 180px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.75), rgba(168, 85, 247, 0.65));
+            box-shadow: 0 0 45px rgba(59, 130, 246, 0.35);
+            position: relative;
+            overflow: hidden;
+            animation: float 9s ease-in-out infinite;
+        }
+
+        .orbital::before,
+        .orbital::after {
+            content: '';
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(15, 23, 42, 0.35);
+            animation: pulseGlow 12s linear infinite;
+        }
+
+        .orbital::before {
+            width: 120px;
+            height: 120px;
+            top: 18px;
+            left: 18px;
+        }
+
+        .orbital::after {
+            width: 60px;
+            height: 60px;
+            bottom: 22px;
+            right: 28px;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-12px) rotate(4deg); }
+        }
+
+        @keyframes pulseGlow {
+            0%, 100% { transform: scale(1); opacity: 0.4; }
+            50% { transform: scale(1.12); opacity: 0.7; }
+        }
+
+        .settings-card {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .proxy-form {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+
+        .proxy-form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+        }
+
+        .proxy-actions {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .proxy-status {
+            font-size: 0.9rem;
+            color: var(--text-soft);
+        }
+
+        .proxy-status.success {
+            color: var(--success);
+        }
+
+        .proxy-status.error {
+            color: var(--danger);
+        }
+
+        .task-form {
+            background: var(--bg-card-alt);
+        }
+
+        .task-form h2,
+        .card h2,
+        .card h3 {
+            margin-top: 0;
+            color: var(--text-main);
+            font-weight: 600;
+            letter-spacing: -0.01em;
+        }
+
+        .task-form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 18px;
+            margin-top: 18px;
+        }
+
+        label.input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }
+
+        input[type="text"],
+        input[type="date"],
+        input[type="number"],
+        select,
+        textarea {
+            font-family: inherit;
+            background: var(--bg-input);
+            color: var(--text-main);
+            border: 1px solid rgba(148, 163, 184, 0.25);
+            border-radius: 12px;
+            padding: 12px 14px;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        textarea {
+            resize: vertical;
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus {
+            outline: none;
+            border-color: rgba(96, 165, 250, 0.95);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+        }
+
+        .media-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 14px;
+            margin: 18px 0 12px;
+        }
+
+        .checkbox {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(37, 99, 235, 0.08);
+            padding: 10px 14px;
+            border-radius: 12px;
+            border: 1px solid rgba(37, 99, 235, 0.14);
+            font-size: 0.95rem;
+            color: var(--text-secondary);
+        }
+
+        .checkbox span {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .checkbox input {
+            accent-color: var(--accent-blue);
+            width: 18px;
+            height: 18px;
+        }
+
+        .format-section {
+            margin-top: 22px;
+            padding: 18px;
+            border-radius: 14px;
+            background: var(--bg-card-alt);
+            border: 1px solid rgba(148, 163, 184, 0.35);
+        }
+
+        .format-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            margin-top: 14px;
+        }
+
+        .format-notes {
+            width: 100%;
+            min-height: 80px;
+        }
+
+        button {
+            cursor: pointer;
+            font-family: inherit;
+            font-weight: 600;
+            border: none;
+            border-radius: 14px;
+            padding: 12px 20px;
+            background: linear-gradient(135deg, #2563eb, #1d4ed8);
+            color: white;
+            letter-spacing: 0.02em;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+        }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 15px 35px rgba(37, 99, 235, 0.35);
+            background: linear-gradient(135deg, #60a5fa, #1e40af);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        button.secondary {
+            background: rgba(99, 102, 241, 0.12);
+            color: var(--accent-blue);
+        }
+
+        button.secondary:hover:not(:disabled) {
+            background: rgba(99, 102, 241, 0.2);
+            box-shadow: none;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: minmax(280px, 360px) 1fr;
+            gap: 24px;
+        }
+
+        .task-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+
+        .task-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 14px 16px;
+            border-radius: 14px;
+            background: var(--bg-card-alt);
+            border: 1px solid rgba(148, 163, 184, 0.3);
+            transition: border-color 0.2s ease, transform 0.2s ease, background 0.2s ease;
+        }
+
+        .task-item:hover {
+            border-color: rgba(37, 99, 235, 0.45);
+            background: #eef2ff;
+            transform: translateX(2px);
+        }
+
+        .task-item.active {
+            border-color: rgba(37, 99, 235, 0.85);
+            background: rgba(219, 234, 254, 0.85);
+            box-shadow: 0 0 18px rgba(59, 130, 246, 0.18);
+        }
+
+        .task-item a {
+            flex: 1;
+            color: var(--text-main);
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: rgba(148, 163, 184, 0.2);
+            color: var(--text-soft);
+        }
+
+        .status-running { background: rgba(217, 119, 6, 0.12); color: var(--warning); }
+        .status-success { background: rgba(16, 185, 129, 0.12); color: var(--success); }
+        .status-failed { background: rgba(220, 38, 38, 0.12); color: var(--danger); }
+        .status-planned { background: rgba(14, 165, 233, 0.12); color: var(--accent-cyan); }
+        .status-paused { background: rgba(59, 130, 246, 0.12); color: var(--accent-blue); }
+        .status-manually_overridden,
+        .status-skipped_retry { background: rgba(148, 163, 184, 0.16); color: var(--text-soft); }
+
+        .dag-card {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+
+        .vis-network {
+            height: 420px;
+            border-radius: 16px;
+            background: #f8fafc;
+            border: 1px solid rgba(148, 163, 184, 0.4);
+            box-shadow: inset 0 0 25px rgba(148, 163, 184, 0.18);
+        }
+
+        .node-details {
+            background: var(--bg-card-alt);
+            border-radius: 18px;
+            padding: 20px;
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+
+        .node-details p {
+            margin: 0;
+            color: var(--text-soft);
+        }
+
+        .node-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 16px;
+            padding: 16px;
+            border-radius: 14px;
+            background: rgba(191, 219, 254, 0.35);
+        }
+
+        .node-summary-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            color: var(--text-secondary);
+        }
+
+        .node-summary-item span {
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-soft);
+        }
+
+        .node-data-section {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding: 16px;
+            border-radius: 14px;
+            background: #fff;
+            border: 1px solid rgba(148, 163, 184, 0.35);
+        }
+
+        .node-data-section h4 {
+            margin: 0;
+            font-size: 1rem;
+            color: var(--text-main);
+        }
+
+        .data-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px 18px;
+        }
+
+        .data-item {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            color: var(--text-secondary);
+        }
+
+        .data-item span {
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-soft);
+        }
+
+        .data-collection {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .data-card {
+            padding: 14px;
+            border-radius: 12px;
+            border: 1px solid rgba(148, 163, 184, 0.3);
+            background: rgba(241, 245, 249, 0.6);
+        }
+
+        .data-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        .data-text {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            color: var(--text-secondary);
+            line-height: 1.55;
+        }
+
+        .data-text p {
+            margin: 0;
+        }
+
+        .schedule-card {
+            position: relative;
+        }
+
+        .schedule-header {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 18px;
+            margin-bottom: 16px;
+        }
+
+        .schedule-subtitle {
+            margin: 6px 0 0;
+            color: var(--text-soft);
+            font-size: 0.95rem;
+        }
+
+        .schedule-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+
+        .schedule-item {
+            border: 1px solid rgba(148, 163, 184, 0.3);
+            border-radius: 16px;
+            background: linear-gradient(180deg, rgba(241, 245, 249, 0.65), rgba(255, 255, 255, 0.95));
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+
+        .schedule-top {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .schedule-index {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
+            background: rgba(37, 99, 235, 0.12);
+            color: var(--accent-blue);
+            font-weight: 600;
+            font-size: 1rem;
+        }
+
+        .schedule-top-group {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .schedule-field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            min-width: 160px;
+        }
+
+        .schedule-field label {
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-soft);
+        }
+
+        .schedule-body {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 18px;
+        }
+
+        .schedule-column {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .inline-textarea {
+            width: 100%;
+            min-height: 72px;
+        }
+
+        .inline-textarea.small {
+            min-height: 56px;
+        }
+
+        .metrics-box {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 12px;
+            padding: 16px;
+            border-radius: 14px;
+            background: rgba(219, 234, 254, 0.4);
+            border: 1px solid rgba(148, 163, 184, 0.35);
+        }
+
+        .metrics-box label {
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-soft);
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        .metrics-input {
+            width: 100%;
+        }
+
+        .content-card {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding: 16px;
+            border-radius: 14px;
+            background: #fff;
+            border: 1px solid rgba(148, 163, 184, 0.35);
+        }
+
+        .content-meta {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .content-placeholder {
+            padding: 12px 14px;
+            border-radius: 12px;
+            border: 1px dashed rgba(148, 163, 184, 0.45);
+            color: var(--text-soft);
+            font-size: 0.9rem;
+            background: rgba(241, 245, 249, 0.6);
+        }
+
+        .content-timestamp {
+            font-size: 0.8rem;
+            color: rgba(71, 85, 105, 0.9);
+        }
+
+        .content-text {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        .content-text p {
+            margin: 0;
+        }
+
+        .chart-wrapper {
+            margin-top: 26px;
+            background: var(--bg-card-alt);
+            border-radius: 16px;
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            padding: 22px;
+            height: 280px;
+        }
+
+        .chart-wrapper canvas {
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        .chart-wrapper canvas {
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        .approve-btn {
+            margin-top: 22px;
+            background: linear-gradient(135deg, var(--success), #16a34a);
+            box-shadow: 0 20px 45px rgba(16, 185, 129, 0.25);
+            animation: pulseButton 2.6s ease-in-out infinite;
+        }
+
+        @keyframes pulseButton {
+            0%, 100% { transform: translateY(0); box-shadow: 0 20px 45px rgba(16, 185, 129, 0.2); }
+            50% { transform: translateY(-2px); box-shadow: 0 26px 55px rgba(16, 185, 129, 0.35); }
+        }
+
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.25);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 50;
+            backdrop-filter: blur(8px);
+        }
+
+        .modal-content {
+            background: #ffffff;
+            border-radius: 18px;
+            width: min(860px, 92vw);
+            padding: 28px;
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            box-shadow: 0 25px 60px rgba(15, 23, 42, 0.18);
+        }
+
+        #settingsContent {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        #settingsContent input {
+            width: 100%;
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            margin-top: 18px;
+        }
+
+        .modal-content h3 {
+            margin-top: 0;
+            color: var(--text-main);
+        }
+
+        @media (max-width: 1200px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 720px) {
+            body {
+                padding: 18px;
+            }
+
+            .card {
+                padding: 22px;
+            }
+
+            .media-options {
+                flex-direction: column;
+                align-items: stretch;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <section class="page-hero card">
+            <div class="page-title">
+                <div class="page-title-header">
+                    <h1>AgentFlow 2.0 — Панель Управления</h1>
+                    <button id="settingsBtn" class="secondary settings-trigger">⚙️ Настройки</button>
+                </div>
+                <p class="page-subtitle">Единое место для мониторинга и управления мультиагентными кампаниями. Отслеживайте DAG, согласовывайте стратегии и запускайте генерацию контента в «AI»-стиле ночного неона.</p>
+                <div class="hero-meta">
+                    <span class="meta-chip">⚡ Реал-тайм DAG</span>
+                    <span class="meta-chip">🧠 Автономные агенты</span>
+                    <span class="meta-chip">🌌 Тёмная тема</span>
+                </div>
+            </div>
+            <div class="hero-illustration">
+                <div class="orbital" aria-hidden="true"></div>
+            </div>
+        </section>
+
+        <section class="card task-form">
+            <h2>Запустить новую задачу</h2>
+            <div class="task-form-grid">
+                <label class="input-group">
+                    Название кампании
+                    <input type="text" id="taskName" value="Кампания по продвижению 'Fitness Aesthetics'" required placeholder="Имя кампании">
+                </label>
+                <label class="input-group">
+                    Основная тема
+                    <input type="text" id="taskTopic" value="Новый подход к фитнесу от Габриеля" required placeholder="Тема кампании">
+                </label>
+                <label class="input-group">
+                    Тональность
+                    <select id="taskTone">
+                        <option value="enthusiastic">Энтузиастичный</option>
+                        <option value="friendly">Дружелюбный</option>
+                        <option value="formal">Официальный</option>
+                    </select>
+                </label>
+            </div>
+            <div class="media-options">
+                <label class="checkbox">
+                    <input type="checkbox" id="taskGenerateImage" checked>
+                    <span>🎨 Планировать изображение</span>
+                </label>
+                <label class="checkbox">
+                    <input type="checkbox" id="taskGenerateVideo">
+                    <span>🎬 Планировать видео</span>
+                </label>
+            </div>
+            <div class="format-section">
+                <h3>Дополнительные параметры контента</h3>
+                <div class="format-grid">
+                    <label class="input-group">
+                        Длина контента (слова)
+                        <input type="text" id="formatLength" placeholder="300 слов">
+                    </label>
+                    <label class="input-group">
+                        Целевая аудитория
+                        <input type="text" id="formatAudience" placeholder="Миллениалы">
+                    </label>
+                    <label class="input-group">
+                        Канал распространения
+                        <input type="text" id="formatChannel" placeholder="Instagram, YouTube...">
+                    </label>
+                    <label class="input-group">
+                        Призыв к действию
+                        <input type="text" id="formatCTA" placeholder="Записаться на демо">
+                    </label>
+                </div>
+                <label class="input-group">
+                    Дополнительные инструкции
+                    <textarea id="formatNotes" class="format-notes" placeholder="Стиль, ключевые сообщения, ограничения..."></textarea>
+                </label>
+            </div>
+            <button id="startTaskBtn">🚀 Запустить AgentFlow</button>
+        </section>
+
+        <section class="dashboard-grid">
+            <div class="card">
+                <h2>Список задач</h2>
+                <ul id="tasksContainer" class="task-list"></ul>
+            </div>
+            <div class="card dag-card">
+                <div class="schedule-header">
+                    <div>
+                        <h2>Мониторинг DAG</h2>
+                        <p class="schedule-subtitle">Выберите узел, чтобы раскрыть детали работы агента.</p>
+                    </div>
+                    <span class="meta-chip" id="taskTitle">Нет активной задачи</span>
+                </div>
+                <div id="networkContainer" class="vis-network"></div>
+                <div id="nodeDetailsContainer" class="node-details">
+                    <p>Нажмите на узел, чтобы увидеть статус, стоимость и подробные промпты.</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="scheduleContainer" class="card schedule-card"></section>
+
+        <div id="promptModal" class="modal-backdrop">
+            <div class="modal-content">
+                <h3>Редактировать промпт агента <span id="editNodeId"></span></h3>
+                <p>Причина сбоя: <strong id="failReason"></strong></p>
+                <textarea id="newPromptArea" style="width: 100%; height: 220px;"></textarea>
+                <div class="modal-actions">
+                    <button id="submitPromptBtn">Перезапустить</button>
+                    <button class="secondary" id="cancelPromptBtn">Отмена</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="settingsModal" class="modal-backdrop">
+            <div class="modal-content">
+                <h2>Настройки</h2>
+                <div id="settingsContent">
+                    <h3>Proxy Сервер</h3>
+                    <input type="text" id="proxyHost" placeholder="Хост (e.g., 127.0.0.1)">
+                    <input type="text" id="proxyPort" placeholder="Порт (e.g., 8888)">
+                    <input type="text" id="proxyUser" placeholder="Имя пользователя (опционально)">
+                    <input type="password" id="proxyPass" placeholder="Пароль (опционально)">
+                    <h3>Gemini API</h3>
+                    <input type="password" id="geminiKey" placeholder="Ваш Gemini API Ключ">
+                </div>
+                <div class="modal-actions">
+                    <button id="saveSettingsBtn">Сохранить</button>
+                    <button class="secondary" id="cancelSettingsBtn">Отмена</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const tasksContainer = document.getElementById('tasksContainer');
+        const taskTitle = document.getElementById('taskTitle');
+        const nodeDetailsContainer = document.getElementById('nodeDetailsContainer');
+        const scheduleContainer = document.getElementById('scheduleContainer');
+        const promptModal = document.getElementById('promptModal');
+        const editNodeId = document.getElementById('editNodeId');
+        const failReason = document.getElementById('failReason');
+        const newPromptArea = document.getElementById('newPromptArea');
+        const submitPromptBtn = document.getElementById('submitPromptBtn');
+        const cancelPromptBtn = document.getElementById('cancelPromptBtn');
+        const startTaskBtn = document.getElementById('startTaskBtn');
+        const taskGenerateImage = document.getElementById('taskGenerateImage');
+        const taskGenerateVideo = document.getElementById('taskGenerateVideo');
+        const formatLength = document.getElementById('formatLength');
+        const formatAudience = document.getElementById('formatAudience');
+        const formatChannel = document.getElementById('formatChannel');
+        const formatCTA = document.getElementById('formatCTA');
+        const formatNotes = document.getElementById('formatNotes');
+        const settingsBtn = document.getElementById('settingsBtn');
+        const settingsModal = document.getElementById('settingsModal');
+        const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+        const cancelSettingsBtn = document.getElementById('cancelSettingsBtn');
+        const proxyHostInput = document.getElementById('proxyHost');
+        const proxyPortInput = document.getElementById('proxyPort');
+        const proxyUserInput = document.getElementById('proxyUser');
+        const proxyPassInput = document.getElementById('proxyPass');
+        const geminiKeyInput = document.getElementById('geminiKey');
+
+        let activeTaskId = null;
+        let network = null;
+        let visData = { nodes: new vis.DataSet(), edges: new vis.DataSet() };
+        let pendingRestartNode = null;
+        let currentSchedule = [];
+        let scheduleChart = null;
+
+        async function openSettingsModal() {
+            try {
+                const [proxyRes, geminiRes] = await Promise.all([
+                    fetch('/api/settings/proxy'),
+                    fetch('/api/settings/gemini')
+                ]);
+
+                const proxyData = await proxyRes.json().catch(() => ({ success: false }));
+                const geminiData = await geminiRes.json().catch(() => ({ success: false }));
+
+                if (proxyRes.ok && proxyData?.success) {
+                    const config = proxyData.config || {};
+                    proxyHostInput.value = config.host || '';
+                    proxyPortInput.value = config.port || '';
+                    proxyUserInput.value = config.username || '';
+                    proxyPassInput.value = config.password || '';
+                } else {
+                    proxyHostInput.value = '';
+                    proxyPortInput.value = '';
+                    proxyUserInput.value = '';
+                    proxyPassInput.value = '';
+                    if (proxyData?.message) {
+                        console.warn(proxyData.message);
+                    }
+                }
+
+                geminiKeyInput.value = geminiData?.hasKey ? '********' : '';
+            } catch (error) {
+                console.warn('Не удалось загрузить настройки:', error);
+                proxyHostInput.value = '';
+                proxyPortInput.value = '';
+                proxyUserInput.value = '';
+                proxyPassInput.value = '';
+                geminiKeyInput.value = '';
+            }
+
+            settingsModal.style.display = 'flex';
+        }
+
+        function closeSettingsModal() {
+            settingsModal.style.display = 'none';
+        }
+
+        async function saveSettings() {
+            const proxyHost = proxyHostInput.value.trim();
+            const proxyPort = proxyPortInput.value.trim();
+            const proxyUser = proxyUserInput.value.trim();
+            const proxyPass = proxyPassInput.value.trim();
+            const geminiKey = geminiKeyInput.value;
+
+            try {
+                const requests = [
+                    fetch('/api/settings/proxy', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ host: proxyHost, port: proxyPort, username: proxyUser, password: proxyPass })
+                    })
+                ];
+
+                if (geminiKey !== '********') {
+                    requests.push(
+                        fetch('/api/settings/gemini', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ apiKey: geminiKey })
+                        })
+                    );
+                }
+
+                const responses = await Promise.all(
+                    requests.map(async request => {
+                        const res = await request;
+                        const payload = await res.json().catch(() => ({}));
+                        if (!res.ok || payload?.success === false) {
+                            throw new Error(payload?.message || 'Не удалось сохранить настройки.');
+                        }
+                        return payload;
+                    })
+                );
+
+                alert('Настройки сохранены. Перезапустите приложение, если меняли прокси.');
+                if (responses.length > 1 && geminiKey !== '********') {
+                    geminiKeyInput.value = '********';
+                }
+                closeSettingsModal();
+            } catch (error) {
+                alert(error.message || 'Не удалось сохранить настройки.');
+            }
+        }
+
+        const socket = io();
+
+        const AGENT_FRIENDLY_NAMES = {
+            WriterAgent: '📝 Генерация текста',
+            GuardAgent: '🛡️ Проверка качества',
+            ProductAnalysisAgent: '🔍 Анализ продукта',
+            StrategyAgent: '♟️ Разработка стратегии',
+            HumanGateAgent: '👤 Ожидание одобрения',
+            StrategyReviewAgent: '🔄 Анализ стратегии',
+            ImageAgent: '🎨 Планирование изображения',
+            VideoAgent: '🎬 Планирование видео',
+            RetryAgent: '⚙️ Автокоррекция'
+        };
+
+        function getColorByStatus(status) {
+            switch (status) {
+                case 'success':
+                    return { background: 'rgba(34, 197, 94, 0.25)', border: '#22c55e', highlight: { background: 'rgba(34, 197, 94, 0.35)', border: '#22c55e' } };
+                case 'failed':
+                    return { background: 'rgba(248, 113, 113, 0.25)', border: '#f87171', highlight: { background: 'rgba(248, 113, 113, 0.35)', border: '#f87171' } };
+                case 'running':
+                    return { background: 'rgba(251, 191, 36, 0.25)', border: '#fbbf24', highlight: { background: 'rgba(251, 191, 36, 0.35)', border: '#fbbf24' } };
+                case 'paused':
+                    return { background: 'rgba(251, 146, 60, 0.25)', border: '#fb923c', highlight: { background: 'rgba(251, 146, 60, 0.35)', border: '#fb923c' } };
+                case 'planned':
+                    return { background: 'rgba(14, 165, 233, 0.2)', border: '#38bdf8', highlight: { background: 'rgba(14, 165, 233, 0.3)', border: '#38bdf8' } };
+                case 'manually_overridden':
+                case 'skipped_retry':
+                    return { background: 'rgba(148, 163, 184, 0.2)', border: '#94a3b8', highlight: { background: 'rgba(148, 163, 184, 0.28)', border: '#cbd5f5' } };
+                default:
+                    return { background: 'rgba(99, 102, 241, 0.22)', border: '#6366f1', highlight: { background: 'rgba(99, 102, 241, 0.32)', border: '#6366f1' } };
+            }
+        }
+
+        function getScheduleStatusInfo(status) {
+            const normalized = (status || '').toUpperCase();
+            if (['CONTENT_READY', 'CONTENT_GENERATED', 'DONE', 'READY'].includes(normalized)) {
+                return { label: 'Готово', className: 'status-success' };
+            }
+            if (['CONTENT_GENERATING', 'GENERATING', 'IN_PROGRESS'].includes(normalized)) {
+                return { label: 'Генерация', className: 'status-running' };
+            }
+            if (['CONTENT_FAILED', 'GENERATION_FAILED', 'FAILED'].includes(normalized)) {
+                return { label: 'Ошибка', className: 'status-failed' };
+            }
+            if (['PAUSED', 'WAITING', 'AWAITING_APPROVAL'].includes(normalized)) {
+                return { label: 'Пауза', className: 'status-paused' };
+            }
+            return { label: 'План', className: 'status-planned' };
+        }
+
+        function escapeHtml(value) {
+            if (value === null || value === undefined) {
+                return '';
+            }
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/'/g, '&apos;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function extractContentStrings(item) {
+            if (!item) {
+                return { preview: '—', full: '', hasContent: false };
+            }
+            if (typeof item.content === 'string' && item.content.trim()) {
+                const full = item.content.trim();
+                const preview = full.length > 140 ? `${full.slice(0, 140)}…` : full;
+                return { preview, full, hasContent: true };
+            }
+            const prompt = item.content_prompt;
+            if (prompt) {
+                const raw = typeof prompt === 'string' ? prompt : JSON.stringify(prompt, null, 2);
+                const trimmed = raw.trim();
+                const preview = trimmed.length > 140 ? `${trimmed.slice(0, 140)}…` : trimmed;
+                return { preview, full: trimmed, hasContent: Boolean(trimmed) };
+            }
+            return { preview: 'Контент еще не сгенерирован', full: '', hasContent: false };
+        }
+
+        function formatGeneratedAt(timestamp) {
+            if (!timestamp) return '';
+            const date = new Date(timestamp);
+            if (Number.isNaN(date.getTime())) return '';
+            return date.toLocaleString();
+        }
+
+        function drawNetwork(nodesData, taskId) {
+            activeTaskId = taskId;
+            const container = document.getElementById('networkContainer');
+            visData.nodes.clear();
+            visData.edges.clear();
+
+            const visNodes = [];
+            const visEdges = [];
+
+            nodesData.forEach(node => {
+                const status = (node.status || '').toLowerCase();
+                const agentType = node.agent || node.agent_type || 'Unknown';
+
+                if (status === 'skipped_retry') return;
+
+                const friendlyName = AGENT_FRIENDLY_NAMES[agentType] || agentType;
+                const color = getColorByStatus(status);
+
+                visNodes.push({
+                    id: node.id,
+                    label: `${friendlyName}\n(${node.id})\n${node.status}`,
+                    color,
+                    font: { color: '#f9fafb', size: 16, face: 'Inter' },
+                    margin: 12,
+                    shape: 'box',
+                    borderWidth: 2,
+                    nodeData: node
+                });
+
+                if (Array.isArray(node.dependsOn)) {
+                    node.dependsOn.forEach(depId => {
+                        const depNode = nodesData.find(n => n.id === depId);
+                        if (depNode?.status?.toLowerCase() === 'skipped_retry') return;
+                        visEdges.push({ from: depId, to: node.id, arrows: { to: { enabled: true, scaleFactor: 0.7 } }, color: { color: 'rgba(148, 163, 184, 0.5)' } });
+                    });
+                }
+            });
+
+            visData.nodes.add(visNodes);
+            visData.edges.add(visEdges);
+
+            const options = {
+                physics: { enabled: false },
+                interaction: {
+                    hover: true,
+                    zoomView: true
+                },
+                nodes: {
+                    shapeProperties: { borderDashes: false },
+                    shadow: true
+                },
+                edges: {
+                    smooth: { type: 'cubicBezier' },
+                    shadow: true,
+                    color: 'rgba(148, 163, 184, 0.45)'
+                }
+            };
+
+            if (!network) {
+                network = new vis.Network(container, visData, options);
+                network.on('selectNode', params => {
+                    const nodeId = params.nodes[0];
+                    if (nodeId) {
+                        const nodeEntry = visData.nodes.get(nodeId);
+                        showNodeDetails(nodeEntry?.nodeData);
+                    }
+                });
+            } else {
+                network.setOptions(options);
+                network.setData(visData);
+            }
+        }
+
+        function buildContentFormatPayload() {
+            const entries = [
+                { label: 'Длина', value: formatLength.value.trim() },
+                { label: 'Целевая аудитория', value: formatAudience.value.trim() },
+                { label: 'Канал фокуса', value: formatChannel.value.trim() },
+                { label: 'CTA', value: formatCTA.value.trim() },
+            ].filter(entry => entry.value);
+
+            const notes = formatNotes.value.trim();
+            if (notes) {
+                entries.push({ label: 'Дополнительно', value: notes });
+            }
+
+            return entries.map(entry => ({ label: entry.label, value: entry.value }));
+        }
+
+        async function startTask() {
+            startTaskBtn.disabled = true;
+            try {
+                const taskName = document.getElementById('taskName').value;
+                const taskTopic = document.getElementById('taskTopic').value;
+                const taskTone = document.getElementById('taskTone').value;
+                const includeImage = taskGenerateImage.checked;
+                const includeVideo = taskGenerateVideo.checked;
+                const contentFormat = buildContentFormatPayload();
+
+                const response = await fetch('/api/tasks/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ taskName, taskTopic, taskTone, includeImage, includeVideo, contentFormat })
+                });
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(payload.message || 'Не удалось создать задачу.');
+                }
+
+                selectTask(payload.taskId, true);
+            } catch (error) {
+                alert(error.message || 'Произошла ошибка при запуске задачи.');
+            } finally {
+                startTaskBtn.disabled = false;
+            }
+        }
+
+        async function fetchTasks() {
+            try {
+                const response = await fetch('/api/tasks');
+                const tasks = await response.json();
+                renderTaskList(tasks);
+            } catch (error) {
+                console.error('Не удалось получить список задач:', error);
+            }
+        }
+
+        function renderTaskList(tasks) {
+            tasksContainer.innerHTML = '';
+            tasks.sort((a, b) => b.id.localeCompare(a.id));
+            tasks.forEach(task => {
+                const li = document.createElement('li');
+                li.className = 'task-item' + (task.id === activeTaskId ? ' active' : '');
+                const statusText = task.status || 'UNKNOWN';
+                const statusClass = `status-${statusText.toLowerCase().replace(/[^a-z0-9_-]/g, '-')}`;
+                const displayName = task?.name || task.id;
+                const trimmedName = displayName.length > 38 ? `${displayName.slice(0, 38)}…` : displayName;
+                const safeTitle = escapeHtml(displayName);
+                const safeLabel = escapeHtml(trimmedName);
+                const safeStatus = escapeHtml(statusText);
+                const safeTaskId = escapeHtml(task.id);
+
+                li.innerHTML = `
+                    <span class="status-pill ${statusClass}">${safeStatus}</span>
+                    <a href="#" data-task-id="${safeTaskId}" title="${safeTitle}">${safeLabel}</a>
+                    <button type="button" class="secondary delete-task-btn" data-task-id="${safeTaskId}">Удалить</button>
+                `;
+
+                li.querySelector('a').addEventListener('click', event => {
+                    event.preventDefault();
+                    selectTask(task.id, false);
+                });
+
+                const deleteButton = li.querySelector('.delete-task-btn');
+                deleteButton.addEventListener('click', event => {
+                    deleteTask(event, task.id);
+                });
+
+                tasksContainer.appendChild(li);
+            });
+        }
+
+        async function deleteTask(event, taskId) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            if (!taskId) {
+                return;
+            }
+
+            const confirmed = window.confirm(`Вы уверены, что хотите удалить задачу ${taskId} и все связанные данные?`);
+            if (!confirmed) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
+                const payload = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    throw new Error(payload.message || 'Не удалось удалить задачу.');
+                }
+
+                if (activeTaskId === taskId) {
+                    resetTaskView();
+                }
+
+                fetchTasks();
+            } catch (error) {
+                alert(error.message || 'Не удалось удалить задачу.');
+            }
+        }
+
+        async function selectTask(taskId, scrollIntoView = true) {
+            try {
+                const response = await fetch(`/api/tasks/${taskId}`);
+                const payload = await response.json();
+                if (!response.ok) {
+                    throw new Error(payload.message || 'Не удалось загрузить задачу');
+                }
+
+                activeTaskId = taskId;
+                const tasks = Array.from(tasksContainer.querySelectorAll('.task-item'));
+                tasks.forEach(item => item.classList.toggle('active', item.querySelector('a')?.dataset.taskId === taskId));
+
+                if (scrollIntoView) {
+                    const currentItem = tasksContainer.querySelector(`[data-task-id="${taskId}"]`);
+                    currentItem?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+
+                const { nodes = [], schedule = [], status, name } = payload;
+                taskTitle.textContent = name ? `Задача: ${name}` : `ID: ${taskId}`;
+
+                drawNetwork(nodes, taskId);
+                renderSchedule(schedule, taskId, status, nodes);
+
+                if (!nodes.length) {
+                    nodeDetailsContainer.innerHTML = '<p>Ожидаем данные DAG от агентов…</p>';
+                }
+            } catch (error) {
+                alert(error.message || 'Не удалось загрузить задачу.');
+            }
+        }
+
+        function resetTaskView() {
+            activeTaskId = null;
+            taskTitle.textContent = 'Нет активной задачи';
+            visData.nodes.clear();
+            visData.edges.clear();
+            network?.setData(visData);
+            nodeDetailsContainer.innerHTML = '<p>Выберите задачу, чтобы просмотреть рабочий процесс.</p>';
+            scheduleContainer.innerHTML = '';
+        }
+
+        async function unblockHumanGate(taskId, nodeId) {
+            if (!taskId || !nodeId) return;
+            try {
+                const response = await fetch(`/api/tasks/${taskId}/unblock/${nodeId}`, { method: 'POST' });
+                const payload = await response.json();
+                if (!response.ok) {
+                    throw new Error(payload.message || 'Не удалось подтвердить план.');
+                }
+                alert(payload.message || 'План подтверждён. Продолжаем!');
+            } catch (error) {
+                alert(error.message || 'Ошибка при подтверждении плана.');
+            }
+        }
+
+        async function generateContentFromSchedule(taskId, index) {
+            if (!taskId || index === undefined) return;
+
+            const button = document.querySelector(`button[data-action="generate-content"][data-index="${index}"]`);
+            const originalLabel = button ? button.textContent : '';
+            if (button) {
+                button.disabled = true;
+                button.textContent = 'Генерация…';
+            }
+
+            let shouldUnlock = false;
+
+            try {
+                const response = await fetch(`/api/tasks/${taskId}/schedule/generate/${index}`, {
+                    method: 'POST'
+                });
+                const payload = await response.json();
+                if (!response.ok) {
+                    throw new Error(payload.message || 'Не удалось запустить генерацию.');
+                }
+                alert(payload.message);
+            } catch (error) {
+                shouldUnlock = true;
+                alert(error.message || 'Ошибка при запуске генерации.');
+            } finally {
+                if (button && shouldUnlock) {
+                    button.disabled = false;
+                    button.textContent = originalLabel || '⚙️ Сгенерировать';
+                }
+            }
+        }
+
+        function getInitialPrompt(node) {
+            const originalInput = node.input_data || {};
+            if (node.agent_type === 'WriterAgent') {
+                 return originalInput.promptOverride || `Write an ${originalInput.tone} article about ${originalInput.topic}.`;
+            }
+            if (node.agent_type === 'ImageAgent') {
+                 return originalInput.promptOverride || originalInput.description || 'Key visual for the campaign';
+            }
+            if (node.agent_type === 'StrategyAgent') {
+                 return JSON.stringify({ topic: originalInput.topic, format: originalInput.format }, null, 2);
+            }
+            return JSON.stringify(originalInput, null, 2);
+        }
+
+        function normalizeLabel(label) {
+            return label
+                .replace(/([A-Z])/g, ' $1')
+                .replace(/[_\-]+/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .replace(/^./, char => char.toUpperCase());
+        }
+
+        function hasMeaningfulData(value) {
+            if (value === null || value === undefined) return false;
+            if (typeof value === 'string') return value.trim().length > 0;
+            if (typeof value === 'number' || typeof value === 'boolean') return true;
+            if (Array.isArray(value)) {
+                return value.some(item => hasMeaningfulData(item));
+            }
+            if (typeof value === 'object') {
+                return Object.values(value).some(item => hasMeaningfulData(item));
+            }
+            return false;
+        }
+
+        function attemptParseJson(text) {
+            if (typeof text !== 'string') return null;
+            try {
+                const parsed = JSON.parse(text);
+                if (typeof parsed === 'object') {
+                    return parsed;
+                }
+                return parsed;
+            } catch (error) {
+                return null;
+            }
+        }
+
+        function renderTextBlock(text) {
+            if (text === null || text === undefined) {
+                return '<div class="data-text"><p>—</p></div>';
+            }
+            const normalized = String(text);
+            const paragraphs = normalized
+                .split(/\n+/)
+                .map(part => part.trim())
+                .filter(Boolean)
+                .map(part => `<p>${escapeHtml(part)}</p>`)
+                .join('');
+            return `<div class="data-text">${paragraphs || '<p>—</p>'}</div>`;
+        }
+
+        function renderStructuredContent(value, depth = 0) {
+            if (!hasMeaningfulData(value)) {
+                return '<div class="data-text"><p>—</p></div>';
+            }
+
+            if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+                return renderTextBlock(value);
+            }
+
+            if (Array.isArray(value)) {
+                if (!value.length) {
+                    return '<div class="data-text"><p>—</p></div>';
+                }
+
+                if (value.every(item => typeof item !== 'object' || item === null)) {
+                    return renderTextBlock(value.join('\n'));
+                }
+
+                return `<div class="data-collection">${value.map((item, index) => `
+                    <div class="data-card">
+                        <div class="data-card-header">Элемент ${index + 1}</div>
+                        ${renderStructuredContent(item, depth + 1)}
+                    </div>
+                `).join('')}</div>`;
+            }
+
+            if (typeof value === 'object') {
+                const entries = Object.entries(value).filter(([, val]) => hasMeaningfulData(val));
+                if (!entries.length) {
+                    return '<div class="data-text"><p>—</p></div>';
+                }
+
+                return `<div class="data-grid">${entries.map(([key, val]) => `
+                    <div class="data-item">
+                        <span>${escapeHtml(normalizeLabel(key))}</span>
+                        ${renderStructuredContent(val, depth + 1)}
+                    </div>
+                `).join('')}</div>`;
+            }
+
+            return '<div class="data-text"><p>—</p></div>';
+        }
+
+        function buildNodeDataSection(title, data) {
+            if (!hasMeaningfulData(data)) {
+                return '';
+            }
+            return `
+                <div class="node-data-section">
+                    <h4>${escapeHtml(title)}</h4>
+                    ${renderStructuredContent(data)}
+                </div>
+            `;
+        }
+
+        function buildContentText(content) {
+            if (!hasMeaningfulData(content)) {
+                return '';
+            }
+
+            if (typeof content === 'string') {
+                const paragraphs = content
+                    .split(/\n+/)
+                    .map(part => part.trim())
+                    .filter(Boolean)
+                    .map(part => `<p>${escapeHtml(part)}</p>`)
+                    .join('');
+                return `<div class="content-text">${paragraphs}</div>`;
+            }
+
+            if (Array.isArray(content)) {
+                return `<div class="content-text">${content
+                    .map(entry => `<p>${escapeHtml(typeof entry === 'string' ? entry : JSON.stringify(entry, null, 2))}</p>`)
+                    .join('')}</div>`;
+            }
+
+            if (typeof content === 'object') {
+                return `<div class="content-text">${Object.entries(content)
+                    .filter(([, value]) => hasMeaningfulData(value))
+                    .map(([key, value]) => `<p><strong>${escapeHtml(normalizeLabel(key))}:</strong> ${escapeHtml(typeof value === 'string' ? value : JSON.stringify(value, null, 2))}</p>`)
+                    .join('')}</div>`;
+            }
+
+            return `<div class="content-text"><p>${escapeHtml(String(content))}</p></div>`;
+        }
+
+        function showNodeDetails(node) {
+            if (!node) return;
+            const statusClass = `status-${(node.status || '').toLowerCase()}`;
+            const cost = Number.isFinite(node.cost) ? node.cost : 0;
+            const initialPrompt = getInitialPrompt(node);
+            const friendlyName = AGENT_FRIENDLY_NAMES[node.agent_type] || node.agent_type;
+
+            const dependencies = (node.dependsOn || []).filter(Boolean);
+            const durationMs = Number.isFinite(node.duration_ms) ? node.duration_ms : Number.isFinite(node.duration) ? node.duration : null;
+            const retries = Number.isFinite(node.retries) ? node.retries : null;
+
+            const summaryItems = [
+                { label: 'Узел', value: escapeHtml(node.id) },
+                { label: 'Статус', raw: `<span class="status-pill ${statusClass}">${escapeHtml(node.status || '—')}</span>` },
+                { label: 'Стоимость', value: `$${cost.toFixed(4)}` },
+                { label: 'Зависимости', value: dependencies.length ? escapeHtml(dependencies.join(', ')) : '—' }
+            ];
+
+            if (durationMs) {
+                const seconds = durationMs / 1000;
+                const formatted = seconds >= 60 ? `${(seconds / 60).toFixed(1)} мин` : `${seconds.toFixed(1)} сек`;
+                summaryItems.push({ label: 'Длительность', value: formatted });
+            }
+
+            if (retries) {
+                summaryItems.push({ label: 'Повторов', value: retries });
+            }
+
+            const summaryHtml = summaryItems.map(item => `
+                <div class="node-summary-item">
+                    <span>${escapeHtml(item.label)}</span>
+                    ${item.raw ?? `<strong>${typeof item.value === 'string' ? item.value : escapeHtml(String(item.value ?? '—'))}</strong>`}
+                </div>
+            `).join('');
+
+            let html = `
+                <h3>${escapeHtml(friendlyName)}</h3>
+                <div class="node-summary">${summaryHtml}</div>
+            `;
+
+            const parsedInitial = typeof initialPrompt === 'string' ? attemptParseJson(initialPrompt) ?? initialPrompt : initialPrompt;
+            html += buildNodeDataSection('Промпт для агента', parsedInitial);
+
+            const finalPrompt = node.result_data?.meta?.prompt || node.result_data?.meta?.promptOverride;
+            if (finalPrompt) {
+                const parsedFinal = attemptParseJson(finalPrompt) ?? finalPrompt;
+                html += buildNodeDataSection('Финальный промпт', parsedFinal);
+            }
+
+            if (node.agent_type === 'RetryAgent' && node.result_data?.internalPrompt) {
+                const retryPrompt = attemptParseJson(node.result_data.internalPrompt) ?? node.result_data.internalPrompt;
+                html += buildNodeDataSection('Внутренний промпт коррекции', retryPrompt);
+            }
+
+            const generatedContent = node.result_data?.finalImagePrompt || node.result_data?.final_video_prompt;
+            if (generatedContent) {
+                html += buildNodeDataSection('Итоговый творческий план', generatedContent);
+            }
+
+            if (node.agent_type === 'StrategyAgent' && Array.isArray(node.result_data?.schedule)) {
+                html += buildNodeDataSection('План публикаций', node.result_data.schedule);
+            }
+
+            const resultData = node.result_data ? { ...node.result_data } : null;
+            if (resultData && Array.isArray(resultData.schedule)) {
+                delete resultData.schedule;
+            }
+
+            if (resultData?.meta) {
+                resultData.meta = { ...resultData.meta };
+                delete resultData.meta.prompt;
+                delete resultData.meta.promptOverride;
+            }
+
+            if (resultData) {
+                html += buildNodeDataSection('Полный результат', resultData);
+            }
+
+            if (node.status === 'FAILED') {
+                const errorMessage = node.result_data?.reason || node.result_data?.error || 'Проверьте лог выполнения узла.';
+                html += buildNodeDataSection('Ошибка', errorMessage);
+                html += `<a href="/api/logs/${node.taskId}" target="_blank"><button class="secondary">Открыть лог задачи</button></a>`;
+                if (node.agent_type?.includes('GuardAgent')) {
+                    html += `<button style="margin-left: 12px;" onclick="openPromptModal('${node.id}')">✏️ Редактировать промпт</button>`;
+                }
+            }
+
+            nodeDetailsContainer.innerHTML = html;
+        }
+
+        function renderSchedule(schedule, taskId, taskStatus = '', nodes = []) {
+            currentSchedule = Array.isArray(schedule) ? schedule : [];
+
+            if (!currentSchedule.length) {
+                scheduleContainer.innerHTML = `
+                    <h2>График публикаций и статистика</h2>
+                    <p class="schedule-subtitle">Ожидаем формирования стратегии и плана от агентов…</p>
+                `;
+                return;
+            }
+
+            const pausedHumanGateNode = Array.from(nodes || []).find(node => node.agent_type === 'HumanGateAgent' && node.status === 'PAUSED');
+            const awaitingHumanInput = Boolean(pausedHumanGateNode);
+            const hasHumanGate = (nodes || []).some(node => node.agent_type === 'HumanGateAgent');
+            const strategyReady = (nodes || []).some(node => node.agent_type === 'StrategyAgent' && node.status === 'SUCCESS');
+            const humanGateCompleted = (nodes || []).some(node => node.agent_type === 'HumanGateAgent' && node.status === 'SUCCESS');
+            const generatorEnabled = awaitingHumanInput || humanGateCompleted || !hasHumanGate || strategyReady;
+            const planEditable = awaitingHumanInput || (!hasHumanGate || humanGateCompleted);
+            const metricsEditable = humanGateCompleted || !hasHumanGate;
+
+            const planDisabledAttr = planEditable ? '' : 'disabled';
+            const metricsDisabledAttr = metricsEditable ? '' : 'disabled';
+
+            const statusNotice = awaitingHumanInput
+                ? 'Расписание ожидает подтверждения. Можно корректировать план перед запуском.'
+                : humanGateCompleted
+                    ? 'Расписание одобрено. Метрики доступны для обновления, генерация активна.'
+                    : strategyReady
+                        ? hasHumanGate
+                            ? 'План сформирован и ждёт вашего финального одобрения.'
+                            : 'План сформирован. Доступно редактирование и генерация контента.'
+                        : 'Расписание формируется автоматически.';
+
+            let html = `
+                <div class="schedule-header">
+                    <div>
+                        <h2>График публикаций и статистика</h2>
+                        <p class="schedule-subtitle">${escapeHtml(statusNotice)}</p>
+                    </div>
+                    ${awaitingHumanInput ? '<span class="status-pill status-paused">Требуется одобрение</span>' : ''}
+                </div>
+                <div class="schedule-grid">
+            `;
+
+            currentSchedule.forEach((item, index) => {
+                const dateValue = item.date || '';
+                const typeValue = item.type || '';
+                const channelValue = item.channel || '';
+                const topicValue = item.topic || '';
+                const objectiveValue = item.objective ?? item.goal ?? '';
+                const notesValue = item.notes || '';
+                const viewsValue = Number.isFinite(item.views) ? item.views : Number.parseInt(item.views ?? 0, 10) || 0;
+                const likesValue = Number.isFinite(item.likes) ? item.likes : Number.parseInt(item.likes ?? 0, 10) || 0;
+
+                const statusInfo = getScheduleStatusInfo(item.status);
+                const contentData = extractContentStrings(item);
+                const generatedAt = formatGeneratedAt(item.last_generated_at);
+                const errorText = item.generation_error ? escapeHtml(item.generation_error) : '';
+
+                const safeDate = escapeHtml(dateValue);
+                const safeType = escapeHtml(typeValue);
+                const safeChannel = escapeHtml(channelValue);
+                const safeTopic = escapeHtml(topicValue);
+                const safeObjective = escapeHtml(objectiveValue);
+                const safeNotes = escapeHtml(notesValue);
+
+                const safeGeneratedAt = escapeHtml(generatedAt);
+                const generatedLabel = safeGeneratedAt ? `<span class="content-timestamp">Обновлено: ${safeGeneratedAt}</span>` : '';
+                const safeNodeId = item.last_generated_id ? escapeHtml(item.last_generated_id) : '';
+                const nodeLabel = safeNodeId ? `<span class="content-timestamp">ID узла: ${safeNodeId}</span>` : '';
+
+                const contentFull = contentData.full;
+                const dateField = `<input type="date" value="${safeDate}" data-index="${index}" data-field="date" onchange="updateScheduleStat(this, '${taskId}')" ${planDisabledAttr}>`;
+                const typeField = `<input type="text" value="${safeType}" data-index="${index}" data-field="type" onchange="updateScheduleStat(this, '${taskId}')" ${planDisabledAttr}>`;
+                const channelField = `<input type="text" value="${safeChannel}" data-index="${index}" data-field="channel" onchange="updateScheduleStat(this, '${taskId}')" ${planDisabledAttr}>`;
+                const topicField = `<textarea class="inline-textarea" data-index="${index}" data-field="topic" onchange="updateScheduleStat(this, '${taskId}')" ${planDisabledAttr}>${safeTopic}</textarea>`;
+                const objectiveField = `<textarea class="inline-textarea small" data-index="${index}" data-field="objective" onchange="updateScheduleStat(this, '${taskId}')" ${planDisabledAttr}>${safeObjective}</textarea>`;
+                const notesField = `<textarea class="inline-textarea small" data-index="${index}" data-field="notes" onchange="updateScheduleStat(this, '${taskId}')" ${planDisabledAttr}>${safeNotes}</textarea>`;
+
+                const viewsInput = `<input type="number" min="0" class="metrics-input" value="${viewsValue}" data-index="${index}" data-field="views" onchange="updateScheduleStat(this, '${taskId}')" ${metricsDisabledAttr}>`;
+                const likesInput = `<input type="number" min="0" class="metrics-input" value="${likesValue}" data-index="${index}" data-field="likes" onchange="updateScheduleStat(this, '${taskId}')" ${metricsDisabledAttr}>`;
+
+                const isGenerating = ['CONTENT_GENERATING', 'GENERATING', 'IN_PROGRESS'].includes((item.status || '').toUpperCase());
+                const generatorDisabledAttr = generatorEnabled && !isGenerating ? '' : 'disabled';
+
+                const contentBlock = contentData.hasContent
+                    ? buildContentText(contentFull)
+                    : '<div class="content-placeholder">Контент пока не сгенерирован</div>';
+
+                const errorBlock = errorText
+                    ? `<div class="content-placeholder" style="border-color: rgba(220, 38, 38, 0.45); background: rgba(254, 226, 226, 0.65); color: var(--danger);">Ошибка: ${errorText}</div>`
+                    : '';
+
+                html += `
+                    <div class="schedule-item">
+                        <div class="schedule-top">
+                            <div class="schedule-top-group">
+                                <div class="schedule-index">${index + 1}</div>
+                                <div class="schedule-field">
+                                    <label>Дата</label>
+                                    ${dateField}
+                                </div>
+                                <div class="schedule-field">
+                                    <label>Тип</label>
+                                    ${typeField}
+                                </div>
+                                <div class="schedule-field">
+                                    <label>Каналы</label>
+                                    ${channelField}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="schedule-body">
+                            <div class="schedule-column">
+                                <div class="schedule-field">
+                                    <label>Тема / сообщение</label>
+                                    ${topicField}
+                                </div>
+                                <div class="schedule-field">
+                                    <label>Цель</label>
+                                    ${objectiveField}
+                                </div>
+                                <div class="schedule-field">
+                                    <label>Заметки</label>
+                                    ${notesField}
+                                </div>
+                            </div>
+                            <div class="schedule-column">
+                                <div class="content-card">
+                                    <div class="content-meta">
+                                        <span class="status-pill ${statusInfo.className}">${statusInfo.label}</span>
+                                        ${generatedLabel}
+                                        ${nodeLabel}
+                                        <button class="secondary" data-action="generate-content" data-index="${index}" ${generatorDisabledAttr}>⚙️ Сгенерировать</button>
+                                    </div>
+                                    ${contentBlock}
+                                    ${errorBlock}
+                                </div>
+                                <div class="metrics-box">
+                                    <div>
+                                        <label>Просмотры</label>
+                                        ${viewsInput}
+                                    </div>
+                                    <div>
+                                        <label>Лайки</label>
+                                        ${likesInput}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += `
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="scheduleChart"></canvas>
+                </div>
+            `;
+
+            if (awaitingHumanInput && pausedHumanGateNode?.id) {
+                html += `<button class="approve-btn" onclick="unblockHumanGate('${taskId}', '${pausedHumanGateNode.id}')">✅ Одобрить план и продолжить</button>`;
+            }
+
+            scheduleContainer.innerHTML = html;
+
+            scheduleContainer.querySelectorAll('[data-action="generate-content"]').forEach(button => {
+                if (button.hasAttribute('disabled')) {
+                    return;
+                }
+                button.addEventListener('click', () => {
+                    const idx = Number.parseInt(button.dataset.index, 10);
+                    if (Number.isInteger(idx)) {
+                        generateContentFromSchedule(taskId, idx);
+                    }
+                });
+            });
+
+            updateScheduleChart(currentSchedule);
+        }
+
+        function updateScheduleChart(schedule = []) {
+            const canvas = document.getElementById('scheduleChart');
+            if (!canvas) {
+                if (scheduleChart) {
+                    scheduleChart.destroy();
+                    scheduleChart = null;
+                }
+                return;
+            }
+
+            const labels = schedule.map((item, index) => item.date || `День ${index + 1}`);
+            const views = schedule.map(item => Number(item.views) || 0);
+            const likes = schedule.map(item => Number(item.likes) || 0);
+
+            if (scheduleChart && scheduleChart.canvas !== canvas) {
+                scheduleChart.destroy();
+                scheduleChart = null;
+            }
+
+            if (scheduleChart) {
+                scheduleChart.data.labels = labels;
+                scheduleChart.data.datasets[0].data = views;
+                scheduleChart.data.datasets[1].data = likes;
+                scheduleChart.update();
+                return;
+            }
+
+            scheduleChart = new Chart(canvas.getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: 'Просмотры',
+                            data: views,
+                            borderColor: '#38bdf8',
+                            backgroundColor: 'rgba(56, 189, 248, 0.18)',
+                            fill: true,
+                            tension: 0.35,
+                            pointRadius: 3
+                        },
+                        {
+                            label: 'Лайки',
+                            data: likes,
+                            borderColor: '#a855f7',
+                            backgroundColor: 'rgba(168, 85, 247, 0.22)',
+                            fill: true,
+                            tension: 0.35,
+                            pointRadius: 3
+                        }
+                    ],
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            ticks: { color: 'rgba(226, 232, 240, 0.8)' },
+                            grid: { color: 'rgba(148, 163, 184, 0.1)' }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            ticks: { color: 'rgba(226, 232, 240, 0.8)', precision: 0 },
+                            grid: { color: 'rgba(148, 163, 184, 0.1)' }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { color: 'rgba(226, 232, 240, 0.85)' }
+                        }
+                    }
+                }
+            });
+        }
+
+        async function updateScheduleStat(inputElement, taskId) {
+            const index = Number.parseInt(inputElement.dataset.index, 10);
+            const field = inputElement.dataset.field;
+            if (!Number.isInteger(index) || !field) {
+                return;
+            }
+
+            const payload = { index };
+            payload[field] = inputElement.value;
+
+            try {
+                const response = await fetch(`/api/tasks/${taskId}/schedule/update`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.message || 'Не удалось обновить расписание.');
+                }
+
+                if (data.scheduleItem) {
+                    currentSchedule[index] = data.scheduleItem;
+                    updateScheduleChart(currentSchedule);
+                }
+            } catch (error) {
+                alert(error.message || 'Ошибка при обновлении расписания.');
+            }
+        }
+
+        function openPromptModal(failedGuardId) {
+            pendingRestartNode = failedGuardId;
+            editNodeId.textContent = failedGuardId;
+            const nodeData = visData.nodes.get(failedGuardId)?.nodeData;
+            const dependencyId = nodeData?.dependsOn?.[0];
+            const dependencyNode = dependencyId ? visData.nodes.get(dependencyId)?.nodeData : null;
+
+            if (dependencyNode) {
+                const currentPrompt = dependencyNode.input_data?.promptOverride || JSON.stringify(dependencyNode.input_data, null, 2);
+                newPromptArea.value = currentPrompt;
+            }
+            failReason.textContent = nodeData?.result_data?.reason || 'Неизвестная причина сбоя.';
+            promptModal.style.display = 'flex';
+        }
+
+        async function submitManualRestart() {
+            if (!pendingRestartNode || !activeTaskId) return;
+            submitPromptBtn.disabled = true;
+
+            try {
+                const newPrompt = newPromptArea.value;
+                const response = await fetch(`/api/tasks/${activeTaskId}/restart/${pendingRestartNode}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ newPrompt })
+                });
+                const payload = await response.json();
+
+                if (!response.ok) throw new Error(payload.message || 'Не удалось перезапустить узел.');
+
+                alert(`Перезапуск: ${payload.message}`);
+                closePromptModal();
+            } catch (error) {
+                alert(error.message || 'Ошибка при ручном перезапуске.');
+            } finally {
+                submitPromptBtn.disabled = false;
+            }
+        }
+
+        function closePromptModal() {
+            promptModal.style.display = 'none';
+            pendingRestartNode = null;
+        }
+
+        socket.on('task-update', update => {
+            if (!update || !update.taskId) return;
+            if (update.taskId === activeTaskId) {
+                drawNetwork(update.nodes || [], update.taskId);
+                renderSchedule(update.schedule || [], update.taskId, update.status, update.nodes);
+                const selectedNodeId = network?.getSelectedNodes?.()[0];
+                if (selectedNodeId) {
+                    const nodeEntry = visData.nodes.get(selectedNodeId);
+                    if (nodeEntry) showNodeDetails(nodeEntry.nodeData);
+                }
+            }
+            fetchTasks();
+        });
+
+        socket.on('task-removed', payload => {
+            if (!payload || !payload.taskId) {
+                return;
+            }
+
+            if (payload.taskId === activeTaskId) {
+                resetTaskView();
+            }
+
+            fetchTasks();
+        });
+
+        submitPromptBtn.addEventListener('click', submitManualRestart);
+        cancelPromptBtn.addEventListener('click', closePromptModal);
+        promptModal.addEventListener('click', event => { if (event.target === promptModal) { closePromptModal(); } });
+        startTaskBtn.addEventListener('click', startTask);
+        settingsBtn.addEventListener('click', openSettingsModal);
+        saveSettingsBtn.addEventListener('click', saveSettings);
+        cancelSettingsBtn.addEventListener('click', closeSettingsModal);
+        settingsModal.addEventListener('click', event => { if (event.target === settingsModal) { closeSettingsModal(); } });
+
+        window.onload = () => {
+            fetchTasks();
+        };
+
+        window.updateScheduleStat = updateScheduleStat;
+        window.unblockHumanGate = unblockHumanGate;
+    </script>
+</body>
+</html>
