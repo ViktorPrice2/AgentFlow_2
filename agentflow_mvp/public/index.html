@@ -164,6 +164,45 @@
             50% { transform: scale(1.12); opacity: 0.7; }
         }
 
+        .settings-card {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .proxy-form {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+
+        .proxy-form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+        }
+
+        .proxy-actions {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .proxy-status {
+            font-size: 0.9rem;
+            color: var(--text-soft);
+        }
+
+        .proxy-status.success {
+            color: var(--success);
+        }
+
+        .proxy-status.error {
+            color: var(--danger);
+        }
+
         .task-form {
             background: var(--bg-card-alt);
         }
@@ -759,6 +798,57 @@
             </div>
         </section>
 
+        <section class="card settings-card">
+            <div>
+                <h2>Настройки прокси</h2>
+                <p class="page-subtitle">Эти данные используются агентами для выхода в интернет. По умолчанию подставлены параметры: <code>user332599:hnakbz@102.129.221.246:7239</code>.</p>
+            </div>
+            <form id="proxyForm" class="proxy-form">
+                <div class="proxy-form-grid">
+                    <label class="input-group">
+                        Адрес прокси
+                        <input type="text" id="proxyHost">
+                    </label>
+                    <label class="input-group">
+                        Порт HTTP(S)
+                        <input type="number" id="proxyHttpPort" min="1" placeholder="7239">
+                    </label>
+                    <label class="input-group">
+                        Порт SOCKS5
+                        <input type="number" id="proxySocksPort" min="1" placeholder="17239">
+                    </label>
+                    <label class="input-group">
+                        Логин
+                        <input type="text" id="proxyLogin" placeholder="user332599">
+                    </label>
+                    <label class="input-group">
+                        Пароль
+                        <input type="text" id="proxyPassword" placeholder="hnakbz">
+                    </label>
+                    <label class="input-group">
+                        login:password@ip:port (HTTP)
+                        <input type="text" id="proxyHttpUrl" readonly>
+                    </label>
+                </div>
+                <div class="proxy-actions">
+                    <button type="submit" id="saveProxyBtn">💾 Сохранить прокси</button>
+                    <span class="proxy-status" id="proxyStatus">Настройки прокси не изменялись.</span>
+                </div>
+            </form>
+            <form id="apiKeyForm" class="proxy-form">
+                <div class="proxy-form-grid">
+                    <label class="input-group">
+                        Gemini API Key
+                        <input type="password" id="geminiApiKey" placeholder="AIza... или sk-..." autocomplete="off">
+                    </label>
+                </div>
+                <div class="proxy-actions">
+                    <button type="submit" id="saveApiKeyBtn">🔑 Сохранить ключ Gemini</button>
+                    <span class="proxy-status" id="apiKeyStatus">Ключ не задан.</span>
+                </div>
+            </form>
+        </section>
+
         <section class="card task-form">
             <h2>Запустить новую задачу</h2>
             <div class="task-form-grid">
@@ -871,6 +961,17 @@
         const formatChannel = document.getElementById('formatChannel');
         const formatCTA = document.getElementById('formatCTA');
         const formatNotes = document.getElementById('formatNotes');
+        const proxyForm = document.getElementById('proxyForm');
+        const proxyHost = document.getElementById('proxyHost');
+        const proxyHttpPort = document.getElementById('proxyHttpPort');
+        const proxySocksPort = document.getElementById('proxySocksPort');
+        const proxyLogin = document.getElementById('proxyLogin');
+        const proxyPassword = document.getElementById('proxyPassword');
+        const proxyHttpUrl = document.getElementById('proxyHttpUrl');
+        const proxyStatus = document.getElementById('proxyStatus');
+        const apiKeyForm = document.getElementById('apiKeyForm');
+        const geminiApiKeyInput = document.getElementById('geminiApiKey');
+        const apiKeyStatus = document.getElementById('apiKeyStatus');
 
         let activeTaskId = null;
         let network = null;
@@ -878,6 +979,115 @@
         let pendingRestartNode = null;
         let currentSchedule = [];
         let scheduleChart = null;
+
+        function updateProxyPreview() {
+            const host = proxyHost.value.trim();
+            const port = proxyHttpPort.value.trim();
+            const login = proxyLogin.value.trim();
+            const password = proxyPassword.value.trim();
+            const auth = login ? `${login}${password ? `:${password}` : ''}@` : '';
+            proxyHttpUrl.value = host && port ? `${auth}${host}:${port}` : '';
+        }
+
+        async function loadProxySettings() {
+            try {
+                const response = await fetch('/api/settings/proxy');
+                const payload = await response.json();
+                if (!response.ok || !payload?.config) {
+                    throw new Error(payload?.message || 'Не удалось загрузить прокси.');
+                }
+                const { host, httpPort, socksPort, login, password } = payload.config;
+                proxyHost.value = host || '';
+                proxyHttpPort.value = httpPort || '';
+                proxySocksPort.value = socksPort || '';
+                proxyLogin.value = login || '';
+                proxyPassword.value = password || '';
+                updateProxyPreview();
+                const disabled = !host;
+                proxyStatus.textContent = disabled ? 'Прокси отключён.' : 'Активный прокси загружен.';
+                proxyStatus.className = `proxy-status ${disabled ? '' : 'success'}`.trim();
+            } catch (error) {
+                proxyStatus.textContent = error.message || 'Не удалось загрузить прокси.';
+                proxyStatus.className = 'proxy-status error';
+            }
+        }
+
+        async function saveProxySettings(event) {
+            event.preventDefault();
+            proxyStatus.textContent = 'Сохраняем…';
+            proxyStatus.className = 'proxy-status';
+            try {
+                const payload = {
+                    host: proxyHost.value.trim(),
+                    httpPort: proxyHttpPort.value,
+                    socksPort: proxySocksPort.value,
+                    login: proxyLogin.value.trim(),
+                    password: proxyPassword.value.trim(),
+                };
+                const response = await fetch('/api/settings/proxy', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data?.message || 'Ошибка сохранения настроек.');
+                }
+                const config = data?.config || {};
+                proxyHost.value = config.host || '';
+                proxyHttpPort.value = config.httpPort || '';
+                proxySocksPort.value = config.socksPort || '';
+                proxyLogin.value = config.login || '';
+                proxyPassword.value = config.password || '';
+                updateProxyPreview();
+                proxyStatus.textContent = data?.message || 'Прокси применены.';
+                proxyStatus.className = `proxy-status ${data?.disabled ? '' : 'success'}`.trim();
+            } catch (error) {
+                proxyStatus.textContent = error.message || 'Не удалось сохранить настройки.';
+                proxyStatus.className = 'proxy-status error';
+            }
+        }
+
+        async function loadGeminiApiKey() {
+            try {
+                const response = await fetch('/api/settings/gemini');
+                const payload = await response.json();
+                if (!response.ok) {
+                    throw new Error(payload?.message || 'Не удалось загрузить ключ.');
+                }
+                geminiApiKeyInput.value = '';
+                apiKeyStatus.textContent = payload.hasKey
+                    ? 'Ключ сохранён. Введите новый, чтобы заменить, или оставьте пустым и нажмите сохранить, чтобы удалить.'
+                    : 'Ключ не задан.';
+                apiKeyStatus.className = `proxy-status ${payload.hasKey ? 'success' : ''}`.trim();
+            } catch (error) {
+                apiKeyStatus.textContent = error.message || 'Не удалось загрузить ключ.';
+                apiKeyStatus.className = 'proxy-status error';
+            }
+        }
+
+        async function saveGeminiApiKey(event) {
+            event.preventDefault();
+            apiKeyStatus.textContent = 'Сохраняем ключ…';
+            apiKeyStatus.className = 'proxy-status';
+            try {
+                const response = await fetch('/api/settings/gemini', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ apiKey: geminiApiKeyInput.value }),
+                });
+                const payload = await response.json();
+                if (!response.ok) {
+                    throw new Error(payload?.message || 'Не удалось сохранить ключ.');
+                }
+                geminiApiKeyInput.value = '';
+                apiKeyStatus.textContent = payload?.message || 'Ключ обновлён.';
+                apiKeyStatus.className = `proxy-status ${payload.hasKey ? 'success' : ''}`.trim();
+            } catch (error) {
+                apiKeyStatus.textContent = error.message || 'Не удалось сохранить ключ.';
+                apiKeyStatus.className = 'proxy-status error';
+            }
+        }
 
         const socket = io();
 
@@ -1849,8 +2059,17 @@
         cancelPromptBtn.addEventListener('click', closePromptModal);
         promptModal.addEventListener('click', event => { if (event.target === promptModal) { closePromptModal(); } });
         startTaskBtn.addEventListener('click', startTask);
+        proxyForm.addEventListener('submit', saveProxySettings);
+        [proxyHost, proxyHttpPort, proxyLogin, proxyPassword].forEach(field => {
+            field.addEventListener('input', updateProxyPreview);
+        });
+        apiKeyForm.addEventListener('submit', saveGeminiApiKey);
 
-        window.onload = () => { fetchTasks(); };
+        window.onload = () => {
+            loadProxySettings();
+            loadGeminiApiKey();
+            fetchTasks();
+        };
 
         window.updateScheduleStat = updateScheduleStat;
         window.unblockHumanGate = unblockHumanGate;

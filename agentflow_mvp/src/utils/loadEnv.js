@@ -1,8 +1,8 @@
 import fs from 'fs';
 import dotenv from 'dotenv';
-import { resolveAppPath } from './appPaths.js';
+import { resolveAssetPath } from './appPaths.js';
 
-const envPath = resolveAppPath('.env');
+const envPath = resolveAssetPath('.env');
 
 if (fs.existsSync(envPath)) {
   dotenv.config({ path: envPath });

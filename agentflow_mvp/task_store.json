@@ -88,7 +88,7 @@
             }
           ]
         },
-        "status": "PAUSED",
+        "status": "FAILED",
         "nodes": [
           "node1_write",
           "node2_guard",
@@ -298,7 +298,7 @@
             }
           ]
         },
-        "status": "PAUSED",
+        "status": "FAILED",
         "nodes": [
           "node1_write",
           "node2_guard",
@@ -508,7 +508,7 @@
             }
           ]
         },
-        "status": "PAUSED",
+        "status": "FAILED",
         "nodes": [
           "node1_write",
           "node2_guard",

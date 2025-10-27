@@ -1,11 +1,11 @@
 import fs from 'fs';
 import path from 'path';
 import '../../utils/loadEnv.js';
-import { resolveAppPath } from '../../utils/appPaths.js';
+import { resolveDataPath } from '../../utils/appPaths.js';
 
 // src/core/db/TaskStore.js
 
-const PERSIST_PATH = resolveAppPath('task_store.json');
+const PERSIST_PATH = resolveDataPath('task_store.json');
 const COMPLETED_NODE_STATUSES = new Set(['SUCCESS', 'FAILED', 'MANUALLY_OVERRIDDEN', 'SKIPPED_RETRY']);
 
 const tasks = new Map();

@@ -2,17 +2,20 @@ import axios from 'axios';
 import { promises as fs } from 'fs';
 import path from 'path';
 import '../utils/loadEnv.js';
-import { resolveAppPath } from '../utils/appPaths.js';
+import { resolveDataPath } from '../utils/appPaths.js';
 import { GoogleGenAI } from '@google/genai';
+import { ProxyManager } from './ProxyManager.js';
 
 const getMockMode = () => process.env.MOCK_MODE === 'true';
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1';
 
+const resolveGeminiApiKey = () => ProxyManager.getGeminiApiKey() || process.env.GEMINI_API_KEY || '';
+
 const getGeminiClient = () => {
-  if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY is not set.');
-  return new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+  const apiKey = resolveGeminiApiKey();
+  if (!apiKey) throw new Error('GEMINI_API_KEY is not set.');
+  return new GoogleGenAI({ apiKey });
 };
 
 const MAX_RETRIES = 5;
@@ -31,7 +34,7 @@ const logAxiosError = (error, contextLabel) => {
 };
 
 // --- Image Utilities --- 
-const RESULTS_DIR = resolveAppPath('results');
+const RESULTS_DIR = resolveDataPath('results');
 const PLACEHOLDER_PIXEL_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==';
 const ensureResultsDir = async () => { await fs.mkdir(RESULTS_DIR, { recursive: true }); };
 const extensionFromMimeType = mimeType => mimeType?.toLowerCase().includes('jpeg') ? 'jpg' : 'png';
@@ -53,7 +56,9 @@ const createPlaceholderImage = async (model = 'imagen-3.0-generate') =>
 const sendRequestWithRetries = async (url, payload, axiosConfig) => {
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt += 1) {
     try {
-      const response = await axios.post(url, payload, axiosConfig);
+      const proxyConfig = ProxyManager.buildAxiosConfig();
+      const requestConfig = { ...axiosConfig, ...proxyConfig };
+      const response = await axios.post(url, payload, requestConfig);
       return response;
     } catch (error) {
       const status = error.response?.status;
@@ -86,7 +91,8 @@ const invokeImageModel = async (model, prompt) => {
     return { result: { url: relativePath, mimeType }, tokens: 0, modelUsed: 'MockPlaceholder' };
   }
 
-  if (!GEMINI_API_KEY) {
+  const apiKey = resolveGeminiApiKey();
+  if (!apiKey) {
     throw new Error('GEMINI_API_KEY is not set for image generation calls.');
   }
 
@@ -140,11 +146,12 @@ export class ProviderManager {
 
     // --- РЕАЛЬНЫЙ ВЫЗОВ GOOGLE GEMINI (TEXT) ---
     if (model.includes('gemini') || model.includes('gpt')) {
-      if (!GEMINI_API_KEY) {
+      const apiKey = resolveGeminiApiKey();
+      if (!apiKey) {
         throw new Error('GEMINI_API_KEY is not set for real API calls.');
       }
 
-      const url = `${GEMINI_API_BASE_URL}/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
+      const url = `${GEMINI_API_BASE_URL}/models/${model}:generateContent?key=${apiKey}`;
       console.log(`[API CALL] Calling REAL ${model} for prompt: ${prompt.substring(0, 30)}...`);
 
       const axiosConfig = {

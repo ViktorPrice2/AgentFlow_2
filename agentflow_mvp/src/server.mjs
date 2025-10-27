@@ -1,23 +1,47 @@
 import express from 'express';
 import { createServer } from 'http';
 import { Server as SocketIoServer } from 'socket.io';
+import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import './utils/loadEnv.js';
-import { resolveAppPath } from './utils/appPaths.js';
+import { resolveAssetPath, resolveDataPath } from './utils/appPaths.js';
 import { MasterAgent } from './agents/MasterAgent.js';
 import { TaskStore } from './core/db/TaskStore.js';
 import { Logger } from './core/Logger.js';
+import { ProxyManager } from './core/ProxyManager.js';
 
 const app = express();
 const httpServer = createServer(app);
 const io = new SocketIoServer(httpServer);
 const PORT = process.env.PORT || 3000;
 
-const DAG_PATH = resolveAppPath('plans', 'dag.json');
-const PUBLIC_DIR = resolveAppPath('public');
-const RESULTS_DIR = resolveAppPath('results');
-const LOGS_DIR = resolveAppPath('logs');
+const DAG_PATH = resolveAssetPath('plans', 'dag.json');
+const PUBLIC_DIR = resolveAssetPath('public');
+const RESULTS_DIR = resolveDataPath('results');
+const LOGS_DIR = resolveDataPath('logs');
+const AUTO_OPEN_BROWSER = process.env.AGENTFLOW_DISABLE_BROWSER !== '1';
+let browserLaunched = false;
+
+const launchBrowser = () => {
+  if (browserLaunched || !AUTO_OPEN_BROWSER) {
+    return;
+  }
+  browserLaunched = true;
+  const targetUrl = `http://localhost:${PORT}`;
+
+  try {
+    if (process.platform === 'win32') {
+      spawn('cmd', ['/c', 'start', '', targetUrl], { detached: true, stdio: 'ignore' });
+    } else if (process.platform === 'darwin') {
+      spawn('open', [targetUrl], { detached: true, stdio: 'ignore' });
+    } else {
+      spawn('xdg-open', [targetUrl], { detached: true, stdio: 'ignore' });
+    }
+  } catch (error) {
+    console.warn('[Launcher] Не удалось открыть браузер автоматически:', error.message);
+  }
+};
 
 let dagTemplate = '{}';
 try {
@@ -526,6 +550,58 @@ app.get('/api/logs/:taskId/:nodeId', (req, res) => {
   res.sendFile(logPath);
 });
 
+app.get('/api/settings/proxy', (req, res) => {
+  try {
+    const config = ProxyManager.getClientConfig();
+    res.json({ success: true, config });
+  } catch (error) {
+    console.error('Failed to load proxy settings:', error);
+    res.status(500).json({ success: false, message: 'Не удалось загрузить настройки прокси.' });
+  }
+});
+
+app.post('/api/settings/proxy', (req, res) => {
+  try {
+    const updated = ProxyManager.updateProxyConfig(req.body || {});
+    const disabled = !updated.host;
+    res.json({
+      success: true,
+      config: updated,
+      disabled,
+      message: disabled ? 'Прокси отключён.' : 'Прокси-настройки обновлены.',
+    });
+  } catch (error) {
+    console.error('Failed to update proxy settings:', error);
+    res.status(500).json({ success: false, message: 'Не удалось сохранить настройки прокси.', error: error.message });
+  }
+});
+
+app.get('/api/settings/gemini', (req, res) => {
+  try {
+    const apiKey = ProxyManager.getGeminiApiKey();
+    res.json({ success: true, hasKey: Boolean(apiKey) });
+  } catch (error) {
+    console.error('Failed to load gemini key:', error);
+    res.status(500).json({ success: false, message: 'Не удалось загрузить ключ Gemini.' });
+  }
+});
+
+app.post('/api/settings/gemini', (req, res) => {
+  try {
+    const { apiKey } = req.body || {};
+    const stored = ProxyManager.updateGeminiApiKey(apiKey || '');
+    const hasKey = Boolean(stored);
+    res.json({
+      success: true,
+      hasKey,
+      message: hasKey ? 'Gemini API-ключ сохранён.' : 'Gemini API-ключ очищен.',
+    });
+  } catch (error) {
+    console.error('Failed to update gemini key:', error);
+    res.status(500).json({ success: false, message: 'Не удалось сохранить ключ Gemini.', error: error.message });
+  }
+});
+
 app.post('/api/tasks/:taskId/restart/:nodeId', (req, res) => {
   const { taskId, nodeId } = req.params;
   const { newPrompt } = req.body || {};
@@ -656,6 +732,7 @@ app.delete('/api/tasks/:taskId', (req, res) => {
 async function startApplication() {
   httpServer.listen(PORT, () => {
     console.log(`\nAgentFlow Web UI running at http://localhost:${PORT}`);
+    launchBrowser();
   });
 
   try {
