@@ -1,0 +1,41 @@
+{
+  "task_name": "Стратегия Продвижения (Анализ + Планирование)",
+  "nodes": [
+    {
+      "id": "node1_write",
+      "agent": "WriterAgent",
+      "input": { "topic": "SuperProduct", "tone": "enthusiastic" },
+      "dependsOn": []
+    },
+    {
+      "id": "node2_guard",
+      "agent": "GuardAgent",
+      "input": { "check": "tone" },
+      "dependsOn": ["node1_write"]
+    },
+    {
+      "id": "node1_analyze",
+      "agent": "ProductAnalysisAgent",
+      "input": { "topic": "SuperProduct Analysis" },
+      "dependsOn": ["node2_guard"]
+    },
+    {
+      "id": "node2_strategy",
+      "agent": "StrategyAgent",
+      "input": { "topic": "Initial Strategy Design" },
+      "dependsOn": ["node1_analyze"]
+    },
+    {
+      "id": "node3_human_review",
+      "agent": "HumanGateAgent",
+      "input": { "reason": "Awaiting strategy review and metrics input/update." },
+      "dependsOn": ["node2_strategy"]
+    },
+    {
+      "id": "node4_review_strategy",
+      "agent": "StrategyReviewAgent",
+      "input": { "review_period": "5_days" },
+      "dependsOn": ["node3_human_review"]
+    }
+  ]
+}
