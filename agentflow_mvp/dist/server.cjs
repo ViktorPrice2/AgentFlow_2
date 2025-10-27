@@ -56227,7 +56227,7 @@ var require_dist4 = __commonJS({
       }
       return options;
     };
-    var HttpsProxyAgent = class extends agent_base_1.Agent {
+    var HttpsProxyAgent2 = class extends agent_base_1.Agent {
       constructor(proxy, opts) {
         super(opts);
         this.options = { path: void 0 };
@@ -56306,8 +56306,8 @@ var require_dist4 = __commonJS({
         return fakeSocket;
       }
     };
-    HttpsProxyAgent.protocols = ["http", "https"];
-    exports2.HttpsProxyAgent = HttpsProxyAgent;
+    HttpsProxyAgent2.protocols = ["http", "https"];
+    exports2.HttpsProxyAgent = HttpsProxyAgent2;
     function resume(socket) {
       socket.resume();
     }
@@ -56716,11 +56716,11 @@ Content-Type: ${partContentType}\r
       const urlMayUseProxy = __classPrivateFieldGet(this, _Gaxios_instances, "m", _Gaxios_urlMayUseProxy).call(this, opts.url, opts.noProxy);
       if (opts.agent) {
       } else if (proxy && urlMayUseProxy) {
-        const HttpsProxyAgent = await __classPrivateFieldGet(_a, _a, "m", _Gaxios_getProxyAgent).call(_a);
+        const HttpsProxyAgent2 = await __classPrivateFieldGet(_a, _a, "m", _Gaxios_getProxyAgent).call(_a);
         if (this.agentCache.has(proxy)) {
           opts.agent = this.agentCache.get(proxy);
         } else {
-          opts.agent = new HttpsProxyAgent(proxy, {
+          opts.agent = new HttpsProxyAgent2(proxy, {
             cert: opts.cert,
             key: opts.key
           });
@@ -86092,17 +86092,18 @@ function getProxyClientConfig() {
     httpAuthString: hasProxy ? `${buildAuthString(proxy)}${proxy.host}:${proxy.httpPort}` : ""
   };
 }
-var import_fs5, import_path2, import_socks_proxy_agent, CONFIG_PATH, DEFAULT_PROXY_CONFIG, settings, ProxyManager;
+var import_fs5, import_path2, import_socks_proxy_agent, import_https_proxy_agent, CONFIG_PATH, DEFAULT_PROXY_CONFIG, settings, ProxyManager;
 var init_ProxyManager = __esm({
   "src/core/ProxyManager.js"() {
     import_fs5 = __toESM(require("fs"), 1);
     import_path2 = __toESM(require("path"), 1);
     import_socks_proxy_agent = __toESM(require_dist5(), 1);
+    import_https_proxy_agent = __toESM(require_dist4(), 1);
     init_loadEnv();
     init_appPaths();
     CONFIG_PATH = resolveDataPath("agentflow_settings.json");
     DEFAULT_PROXY_CONFIG = {
-      host: "102.129.221.246",
+      host: "181.215.71.182",
       httpPort: 7239,
       socksPort: 17239,
       login: "user332599",
@@ -86155,17 +86156,13 @@ var init_ProxyManager = __esm({
           return {};
         }
         if (config.httpPort) {
-          const axiosProxy = {
-            host: config.host,
-            port: Number.parseInt(config.httpPort, 10)
+          const auth = buildAuthString(config);
+          const proxyUrl = `http://${auth}${config.host}:${config.httpPort}`;
+          const httpsAgent = new import_https_proxy_agent.HttpsProxyAgent(proxyUrl);
+          return {
+            proxy: false,
+            httpsAgent
           };
-          if (config.login) {
-            axiosProxy.auth = {
-              username: config.login,
-              password: config.password || ""
-            };
-          }
-          return { proxy: axiosProxy };
         }
         if (config.socksPort) {
           const auth = buildAuthString(config);
