@@ -3,6 +3,85 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const ROOT_HINT = process.env.AGENTFLOW_ROOT;
+const SNAPSHOT_PREFIX = 'snapshot:';
+
+const isSnapshotPath = value => typeof value === 'string' && value.startsWith(SNAPSHOT_PREFIX);
+
+const extractSnapshotFromWindowsPath = value => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalized = value.replace(/\\/g, '/');
+  const markerIndex = normalized.toLowerCase().indexOf('/snapshot/');
+  if (markerIndex === -1) {
+    return null;
+  }
+
+  const suffix = normalized.slice(markerIndex + '/snapshot'.length);
+  if (!suffix) {
+    return null;
+  }
+
+  return `${SNAPSHOT_PREFIX}${suffix}`;
+};
+
+const normalizeSnapshotValue = value => {
+  if (!value) {
+    return null;
+  }
+
+  const raw = value.replace(/\\/g, '/');
+  const withoutPrefix = raw.startsWith(SNAPSHOT_PREFIX) ? raw.slice(SNAPSHOT_PREFIX.length) : raw;
+  const trimmed = withoutPrefix.startsWith('/') ? withoutPrefix : `/${withoutPrefix}`;
+  return `${SNAPSHOT_PREFIX}${trimmed}`;
+};
+
+const toAbsoluteIfPossible = candidate => {
+  if (!candidate) {
+    return null;
+  }
+
+  if (isSnapshotPath(candidate)) {
+    return normalizeSnapshotValue(candidate);
+  }
+
+  return path.resolve(candidate);
+};
+
+const deriveSnapshotRoots = () => {
+  if (!process.pkg) {
+    return { canonical: null, filesystem: null };
+  }
+
+  const entry = process.pkg.defaultEntrypoint || process.pkg.entrypoint;
+  if (!entry) {
+    return { canonical: null, filesystem: null };
+  }
+
+  const fromWindows = extractSnapshotFromWindowsPath(entry);
+  const canonicalEntry = isSnapshotPath(entry)
+    ? normalizeSnapshotValue(entry)
+    : entry.startsWith('/snapshot')
+      ? normalizeSnapshotValue(`${SNAPSHOT_PREFIX}${entry.slice('/snapshot'.length)}`)
+      : fromWindows;
+
+  let filesystemRoot = null;
+
+  if (entry.startsWith('file://')) {
+    const fsEntry = fileURLToPath(entry);
+    filesystemRoot = path.dirname(fsEntry);
+  } else if (!isSnapshotPath(entry) && path.isAbsolute(entry)) {
+    filesystemRoot = path.dirname(entry);
+  }
+
+  const canonicalRoot = canonicalEntry ? path.posix.dirname(canonicalEntry) : null;
+
+  return {
+    canonical: canonicalRoot,
+    filesystem: filesystemRoot,
+  };
+};
 
 let moduleDir = null;
 try {
@@ -21,17 +100,63 @@ const EXEC_ROOT = process.pkg
     ? path.resolve(ROOT_HINT)
     : DEFAULT_ROOT;
 
-const SNAPSHOT_ROOT =
-  process.pkg && process.pkg.entrypoint
-    ? path.dirname(process.pkg.defaultEntrypoint || process.pkg.entrypoint)
-    : MODULE_ROOT || EXEC_ROOT;
+const { canonical: SNAPSHOT_CANONICAL_ROOT, filesystem: SNAPSHOT_FILESYSTEM_ROOT } = deriveSnapshotRoots();
+
+const SNAPSHOT_ROOT = SNAPSHOT_CANONICAL_ROOT || SNAPSHOT_FILESYSTEM_ROOT || MODULE_ROOT || EXEC_ROOT;
+
+const expandSnapshotCandidate = candidate => {
+  if (!candidate || !isSnapshotPath(candidate)) {
+    return [candidate].filter(Boolean);
+  }
+
+  const normalized = normalizeSnapshotValue(candidate);
+  const results = [normalized];
+
+  const mountpoint = process.pkg?.mountpoint;
+  if (mountpoint) {
+    const resolvedMount = path.resolve(mountpoint);
+    const relative = normalized.slice(SNAPSHOT_PREFIX.length).replace(/^\/+/, '');
+    const expanded = path.join(resolvedMount, relative);
+    if (!results.includes(expanded)) {
+      results.unshift(expanded);
+    }
+  }
+
+  return results;
+};
+
+const joinWithRoot = (root, segments) => {
+  if (!root) {
+    return [];
+  }
+
+  const normalizedRoot = toAbsoluteIfPossible(root);
+  if (!normalizedRoot) {
+    return [];
+  }
+
+  if (isSnapshotPath(normalizedRoot)) {
+    const joined = segments.reduce(
+      (acc, segment) => path.posix.join(acc, segment),
+      normalizedRoot
+    );
+    return expandSnapshotCandidate(joined);
+  }
+
+  const joined = path.join(normalizedRoot, ...segments);
+  return [joined];
+};
 
 const addCandidate = (list, candidate) => {
-  if (!candidate) return list;
-  const resolved = path.resolve(candidate);
-  if (!list.some(item => item === resolved)) {
-    list.push(resolved);
+  const normalized = toAbsoluteIfPossible(candidate);
+  if (!normalized) {
+    return list;
   }
+
+  if (!list.includes(normalized)) {
+    list.push(normalized);
+  }
+
   return list;
 };
 
@@ -65,6 +190,16 @@ const buildAssetRoots = () => {
   const roots = [];
   addCandidate(roots, EXEC_ROOT);
   addCandidate(roots, SNAPSHOT_ROOT);
+  addCandidate(roots, SNAPSHOT_FILESYSTEM_ROOT);
+  if (process.pkg?.mountpoint) {
+    addCandidate(roots, process.pkg.mountpoint);
+  }
+  if (process.pkg?.entrypoint) {
+    addCandidate(roots, path.dirname(process.pkg.entrypoint));
+  }
+  if (process.pkg?.defaultEntrypoint) {
+    addCandidate(roots, path.dirname(process.pkg.defaultEntrypoint));
+  }
   addCandidate(roots, ROOT_HINT);
   addCandidate(roots, MODULE_ROOT);
   if (!process.pkg) {
@@ -78,16 +213,29 @@ const DEBUG_PATHS = process.env.AGENTFLOW_DEBUG_PATHS === '1';
 
 function resolveFromAssetRoots(segments) {
   for (const root of ASSET_ROOTS) {
-    const candidate = path.join(root, ...segments);
-    const exists = fs.existsSync(candidate);
-    if (DEBUG_PATHS) {
-      console.log('[AgentFlow][Paths][probe]', candidate, exists);
-    }
-    if (exists) {
-      return candidate;
+    const candidates = joinWithRoot(root, segments);
+    for (const candidate of candidates) {
+      let exists = false;
+      try {
+        exists = fs.existsSync(candidate);
+      } catch (error) {
+        exists = false;
+        if (DEBUG_PATHS) {
+          console.log('[AgentFlow][Paths][probe-error]', candidate, error.message);
+        }
+      }
+
+      if (DEBUG_PATHS) {
+        console.log('[AgentFlow][Paths][probe]', candidate, exists);
+      }
+
+      if (exists) {
+        return candidate;
+      }
     }
   }
-  return path.join(EXEC_ROOT, ...segments);
+  const fallbackCandidates = joinWithRoot(EXEC_ROOT, segments);
+  return fallbackCandidates[0] || path.join(EXEC_ROOT, ...segments);
 }
 
 export const APP_ROOT = EXEC_ROOT;
@@ -103,6 +251,8 @@ if (DEBUG_PATHS) {
       {
         execRoot: EXEC_ROOT,
         snapshotRoot: SNAPSHOT_ROOT,
+        snapshotCanonicalRoot: SNAPSHOT_CANONICAL_ROOT,
+        snapshotFilesystemRoot: SNAPSHOT_FILESYSTEM_ROOT,
         dataRoot: DATA_ROOT,
         candidates: ASSET_ROOTS,
       },
@@ -133,3 +283,10 @@ if (DEBUG_PATHS) {
     }
   }
 }
+
+export const __testables = {
+  SNAPSHOT_PREFIX,
+  isSnapshotPath,
+  normalizeSnapshotValue,
+  joinWithRoot,
+};

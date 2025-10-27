@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { SocksProxyAgent } from 'socks-proxy-agent';
+import { createRequire } from 'module';
 import '../utils/loadEnv.js';
 import { resolveDataPath } from '../utils/appPaths.js';
 
@@ -15,6 +15,33 @@ const DEFAULT_PROXY_CONFIG = {
 };
 
 let settings = loadSettings();
+
+const moduleRequire = createRequire(path.join(process.cwd(), 'agentflow.require.cjs'));
+const SOCKS_MODULE_NAME = process.env.AGENTFLOW_SOCKS_MODULE || 'socks-proxy-agent';
+let cachedSocksProxyAgent = undefined;
+
+const resolveSocksProxyAgent = () => {
+  if (cachedSocksProxyAgent !== undefined) {
+    return cachedSocksProxyAgent;
+  }
+
+  try {
+    const required = moduleRequire(SOCKS_MODULE_NAME);
+    const resolved = required?.SocksProxyAgent || required?.default || required;
+    if (typeof resolved !== 'function') {
+      throw new Error('SocksProxyAgent export is not a constructor');
+    }
+    cachedSocksProxyAgent = resolved;
+  } catch (error) {
+    cachedSocksProxyAgent = null;
+    console.warn(
+      `[ProxyManager] SOCKS proxy support disabled (${error.message}). ` +
+        `Install "${SOCKS_MODULE_NAME}" to enable SOCKS5 tunnelling.`
+    );
+  }
+
+  return cachedSocksProxyAgent;
+};
 
 function ensureDataDir() {
   const dir = path.dirname(CONFIG_PATH);
@@ -218,6 +245,11 @@ export const ProxyManager = {
     }
 
     if (config.socksPort) {
+      const SocksProxyAgent = resolveSocksProxyAgent();
+      if (!SocksProxyAgent) {
+        return {};
+      }
+
       const auth = buildAuthString(config);
       const socksUrl = `socks5://${auth}${config.host}:${config.socksPort}`;
       const agent = new SocksProxyAgent(socksUrl);

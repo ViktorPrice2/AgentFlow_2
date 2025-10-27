@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node src/server.mjs",
     "test": "vitest run",
-    "build": "esbuild src/server.mjs --bundle --platform=node --outfile=dist/server.cjs --format=cjs",
+    "build": "node ./scripts/prepareDist.mjs && esbuild src/server.mjs --bundle --platform=node --outfile=dist/server.cjs --format=cjs && node ./scripts/copyStaticAssets.mjs",
     "build:exe": "npm run build && pkg dist/server.cjs --targets node18-win-x64 --output agentflow-launcher.exe"
   },
   "dependencies": {
@@ -36,6 +36,8 @@
       "node_modules/pug/**/*.js"
     ],
     "assets": [
+      "dist/public/**/*",
+      "dist/plans/**/*",
       "public/**/*",
       "plans/**/*"
     ],
