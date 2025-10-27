@@ -1,17 +1,18 @@
 import fs from 'fs';
 import path from 'path';
 import { SocksProxyAgent } from 'socks-proxy-agent';
+import { HttpsProxyAgent } from 'https-proxy-agent';
 import '../utils/loadEnv.js';
 import { resolveDataPath } from '../utils/appPaths.js';
 
 const CONFIG_PATH = resolveDataPath('agentflow_settings.json');
 
 const DEFAULT_PROXY_CONFIG = {
-  host: '102.129.221.246',
-  httpPort: 7239,
-  socksPort: 17239,
-  login: 'user332599',
-  password: 'hnakbz',
+  host: '',
+  httpPort: null,
+  socksPort: null,
+  login: '',
+  password: '',
 };
 
 let settings = loadSettings();
@@ -204,17 +205,14 @@ export const ProxyManager = {
     }
 
     if (config.httpPort) {
-      const axiosProxy = {
-        host: config.host,
-        port: Number.parseInt(config.httpPort, 10),
+      const auth = buildAuthString(config);
+      const httpUrl = `http://${auth}${config.host}:${config.httpPort}`;
+      const agent = new HttpsProxyAgent(httpUrl);
+      return {
+        httpAgent: agent,
+        httpsAgent: agent,
+        proxy: false,
       };
-      if (config.login) {
-        axiosProxy.auth = {
-          username: config.login,
-          password: config.password || '',
-        };
-      }
-      return { proxy: axiosProxy };
     }
 
     if (config.socksPort) {
@@ -222,9 +220,9 @@ export const ProxyManager = {
       const socksUrl = `socks5://${auth}${config.host}:${config.socksPort}`;
       const agent = new SocksProxyAgent(socksUrl);
       return {
-        proxy: false,
         httpAgent: agent,
         httpsAgent: agent,
+        proxy: false,
       };
     }
 
