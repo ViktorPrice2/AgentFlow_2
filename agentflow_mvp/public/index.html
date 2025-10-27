@@ -801,13 +801,20 @@
         <section class="card settings-card">
             <div>
                 <h2>Настройки прокси</h2>
-                <p class="page-subtitle">Эти данные используются агентами для выхода в интернет. По умолчанию подставлены параметры: <code>user332599:hnakbz@102.129.221.246:7239</code>.</p>
+                <p class="page-subtitle">Укажите параметры вашего прокси-сервера, чтобы агенты могли обращаться к внешним API. Поддерживаются HTTP(S) и SOCKS5.</p>
             </div>
             <form id="proxyForm" class="proxy-form">
                 <div class="proxy-form-grid">
                     <label class="input-group">
                         Адрес прокси
                         <input type="text" id="proxyHost">
+                    </label>
+                    <label class="input-group">
+                        Протокол HTTP прокси
+                        <select id="proxyHttpScheme">
+                            <option value="http">http:// (обычный)</option>
+                            <option value="https">https:// (TLS)</option>
+                        </select>
                     </label>
                     <label class="input-group">
                         Порт HTTP(S)
@@ -819,14 +826,14 @@
                     </label>
                     <label class="input-group">
                         Логин
-                        <input type="text" id="proxyLogin" placeholder="user332599">
+                        <input type="text" id="proxyLogin" placeholder="user">
                     </label>
                     <label class="input-group">
                         Пароль
-                        <input type="text" id="proxyPassword" placeholder="hnakbz">
+                        <input type="text" id="proxyPassword" placeholder="password">
                     </label>
                     <label class="input-group">
-                        login:password@ip:port (HTTP)
+                        Сборка URL для HTTP-прокси
                         <input type="text" id="proxyHttpUrl" readonly>
                     </label>
                 </div>
@@ -963,6 +970,7 @@
         const formatNotes = document.getElementById('formatNotes');
         const proxyForm = document.getElementById('proxyForm');
         const proxyHost = document.getElementById('proxyHost');
+        const proxyHttpScheme = document.getElementById('proxyHttpScheme');
         const proxyHttpPort = document.getElementById('proxyHttpPort');
         const proxySocksPort = document.getElementById('proxySocksPort');
         const proxyLogin = document.getElementById('proxyLogin');
@@ -983,10 +991,11 @@
         function updateProxyPreview() {
             const host = proxyHost.value.trim();
             const port = proxyHttpPort.value.trim();
+            const scheme = proxyHttpScheme.value || 'http';
             const login = proxyLogin.value.trim();
             const password = proxyPassword.value.trim();
             const auth = login ? `${login}${password ? `:${password}` : ''}@` : '';
-            proxyHttpUrl.value = host && port ? `${auth}${host}:${port}` : '';
+            proxyHttpUrl.value = host && port ? `${scheme}://${auth}${host}:${port}` : '';
         }
 
         async function loadProxySettings() {
@@ -996,8 +1005,9 @@
                 if (!response.ok || !payload?.config) {
                     throw new Error(payload?.message || 'Не удалось загрузить прокси.');
                 }
-                const { host, httpPort, socksPort, login, password } = payload.config;
+                const { host, httpPort, socksPort, login, password, httpScheme } = payload.config;
                 proxyHost.value = host || '';
+                proxyHttpScheme.value = httpScheme || 'http';
                 proxyHttpPort.value = httpPort || '';
                 proxySocksPort.value = socksPort || '';
                 proxyLogin.value = login || '';
@@ -1019,6 +1029,7 @@
             try {
                 const payload = {
                     host: proxyHost.value.trim(),
+                    httpScheme: proxyHttpScheme.value,
                     httpPort: proxyHttpPort.value,
                     socksPort: proxySocksPort.value,
                     login: proxyLogin.value.trim(),
@@ -1035,6 +1046,7 @@
                 }
                 const config = data?.config || {};
                 proxyHost.value = config.host || '';
+                proxyHttpScheme.value = config.httpScheme || 'http';
                 proxyHttpPort.value = config.httpPort || '';
                 proxySocksPort.value = config.socksPort || '';
                 proxyLogin.value = config.login || '';
@@ -2063,6 +2075,7 @@
         [proxyHost, proxyHttpPort, proxyLogin, proxyPassword].forEach(field => {
             field.addEventListener('input', updateProxyPreview);
         });
+        proxyHttpScheme.addEventListener('change', updateProxyPreview);
         apiKeyForm.addEventListener('submit', saveGeminiApiKey);
 
         window.onload = () => {

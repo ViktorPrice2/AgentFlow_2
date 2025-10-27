@@ -1,17 +1,21 @@
 import fs from 'fs';
 import path from 'path';
 import { SocksProxyAgent } from 'socks-proxy-agent';
+import { HttpsProxyAgent } from 'https-proxy-agent';
 import '../utils/loadEnv.js';
 import { resolveDataPath } from '../utils/appPaths.js';
 
 const CONFIG_PATH = resolveDataPath('agentflow_settings.json');
 
+const ALLOWED_HTTP_SCHEMES = new Set(['http', 'https']);
+
 const DEFAULT_PROXY_CONFIG = {
-  host: '102.129.221.246',
-  httpPort: 7239,
-  socksPort: 17239,
-  login: 'user332599',
-  password: 'hnakbz',
+  host: '',
+  httpPort: null,
+  httpScheme: 'http',
+  socksPort: null,
+  login: '',
+  password: '',
 };
 
 let settings = loadSettings();
@@ -36,6 +40,19 @@ function loadSettings() {
   return normalizeSettings({});
 }
 
+function normalizeScheme(value) {
+  if (!value || typeof value !== 'string') {
+    return DEFAULT_PROXY_CONFIG.httpScheme;
+  }
+
+  const lower = value.toLowerCase();
+  if (ALLOWED_HTTP_SCHEMES.has(lower)) {
+    return lower;
+  }
+
+  return DEFAULT_PROXY_CONFIG.httpScheme;
+}
+
 function normalizeSettings(raw) {
   if (!raw || typeof raw !== 'object') {
     raw = {};
@@ -49,6 +66,7 @@ function normalizeSettings(raw) {
   const proxy = {
     host: typeof proxyPayload.host === 'string' ? proxyPayload.host.trim() : '',
     httpPort: Number.parseInt(proxyPayload.httpPort, 10) || null,
+    httpScheme: normalizeScheme(proxyPayload.httpScheme || proxyPayload.scheme),
     socksPort: Number.parseInt(proxyPayload.socksPort, 10) || null,
     login: typeof proxyPayload.login === 'string' ? proxyPayload.login.trim() : '',
     password: typeof proxyPayload.password === 'string' ? proxyPayload.password.trim() : '',
@@ -96,15 +114,28 @@ function saveSettings() {
   }
 }
 
-function buildAuthString(config) {
+function encodeCredential(value) {
+  return encodeURIComponent(value);
+}
+
+function buildAuthString(config, { encode = true } = {}) {
   if (!config) return '';
   if (config.login && config.password) {
+    if (encode) {
+      return `${encodeCredential(config.login)}:${encodeCredential(config.password)}@`;
+    }
     return `${config.login}:${config.password}@`;
   }
   if (config.login && !config.password) {
-    return `${config.login}@`;
+    return encode ? `${encodeCredential(config.login)}@` : `${config.login}@`;
   }
   return '';
+}
+
+function buildProxyUrl(config) {
+  const auth = buildAuthString(config, { encode: true });
+  const scheme = config.httpScheme || DEFAULT_PROXY_CONFIG.httpScheme;
+  return `${scheme}://${auth}${config.host}:${config.httpPort}`;
 }
 
 function applyEnvironmentVariables(config) {
@@ -117,8 +148,7 @@ function applyEnvironmentVariables(config) {
   }
 
   if (config.httpPort) {
-    const auth = buildAuthString(config);
-    const httpUrl = `http://${auth}${config.host}:${config.httpPort}`;
+    const httpUrl = buildProxyUrl(config);
     process.env.HTTP_PROXY = httpUrl;
     process.env.HTTPS_PROXY = httpUrl;
   } else {
@@ -144,7 +174,11 @@ function getProxyClientConfig() {
   const hasProxy = proxy.host && proxy.httpPort;
   return {
     ...proxy,
-    httpAuthString: hasProxy ? `${buildAuthString(proxy)}${proxy.host}:${proxy.httpPort}` : '',
+    httpAuthString: hasProxy
+      ? `${proxy.httpScheme || DEFAULT_PROXY_CONFIG.httpScheme}://${buildAuthString(proxy, { encode: false })}${
+          proxy.host
+        }:${proxy.httpPort}`
+      : '',
   };
 }
 
@@ -174,6 +208,7 @@ export const ProxyManager = {
     const normalized = {
       host: typeof merged.host === 'string' ? merged.host.trim() : '',
       httpPort: merged.httpPort ? Number.parseInt(merged.httpPort, 10) || null : null,
+      httpScheme: normalizeScheme(merged.httpScheme || merged.scheme || settings.proxy.httpScheme),
       socksPort: merged.socksPort ? Number.parseInt(merged.socksPort, 10) || null : null,
       login: typeof merged.login === 'string' ? merged.login.trim() : '',
       password: typeof merged.password === 'string' ? merged.password.trim() : '',
@@ -204,17 +239,30 @@ export const ProxyManager = {
     }
 
     if (config.httpPort) {
-      const axiosProxy = {
+      if (config.httpScheme === 'https') {
+        const httpUrl = buildProxyUrl(config);
+        const agent = new HttpsProxyAgent(httpUrl);
+        return {
+          httpAgent: agent,
+          httpsAgent: agent,
+          proxy: false,
+        };
+      }
+
+      const proxyConfig = {
+        protocol: config.httpScheme || DEFAULT_PROXY_CONFIG.httpScheme,
         host: config.host,
-        port: Number.parseInt(config.httpPort, 10),
+        port: config.httpPort,
       };
+
       if (config.login) {
-        axiosProxy.auth = {
+        proxyConfig.auth = {
           username: config.login,
           password: config.password || '',
         };
       }
-      return { proxy: axiosProxy };
+
+      return { proxy: proxyConfig };
     }
 
     if (config.socksPort) {
@@ -222,9 +270,9 @@ export const ProxyManager = {
       const socksUrl = `socks5://${auth}${config.host}:${config.socksPort}`;
       const agent = new SocksProxyAgent(socksUrl);
       return {
-        proxy: false,
         httpAgent: agent,
         httpsAgent: agent,
+        proxy: false,
       };
     }
 
