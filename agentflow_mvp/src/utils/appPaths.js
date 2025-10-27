@@ -3,6 +3,53 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const ROOT_HINT = process.env.AGENTFLOW_ROOT;
+const SNAPSHOT_PREFIX = 'snapshot:';
+
+const isSnapshotPath = value => typeof value === 'string' && value.startsWith(SNAPSHOT_PREFIX);
+
+const normalizeSnapshotValue = value => {
+  if (!value) {
+    return null;
+  }
+
+  const raw = value.replace(/\\/g, '/');
+  const withoutPrefix = raw.startsWith(SNAPSHOT_PREFIX) ? raw.slice(SNAPSHOT_PREFIX.length) : raw;
+  const trimmed = withoutPrefix.startsWith('/') ? withoutPrefix : `/${withoutPrefix}`;
+  return `${SNAPSHOT_PREFIX}${trimmed}`;
+};
+
+const toAbsoluteIfPossible = candidate => {
+  if (!candidate) {
+    return null;
+  }
+
+  if (isSnapshotPath(candidate)) {
+    return normalizeSnapshotValue(candidate);
+  }
+
+  return path.resolve(candidate);
+};
+
+const deriveSnapshotRoot = () => {
+  if (!process.pkg) {
+    return null;
+  }
+
+  const entry = process.pkg.defaultEntrypoint || process.pkg.entrypoint;
+  if (!entry) {
+    return null;
+  }
+
+  if (isSnapshotPath(entry) || entry.startsWith('/snapshot')) {
+    return path.posix.dirname(normalizeSnapshotValue(entry));
+  }
+
+  if (entry.startsWith('file://')) {
+    return normalizeSnapshotValue(fileURLToPath(entry));
+  }
+
+  return path.dirname(entry);
+};
 
 let moduleDir = null;
 try {
@@ -21,17 +68,61 @@ const EXEC_ROOT = process.pkg
     ? path.resolve(ROOT_HINT)
     : DEFAULT_ROOT;
 
-const SNAPSHOT_ROOT =
-  process.pkg && process.pkg.entrypoint
-    ? path.dirname(process.pkg.defaultEntrypoint || process.pkg.entrypoint)
-    : MODULE_ROOT || EXEC_ROOT;
+const SNAPSHOT_ROOT = deriveSnapshotRoot() || MODULE_ROOT || EXEC_ROOT;
+
+const expandSnapshotCandidate = candidate => {
+  if (!candidate || !isSnapshotPath(candidate)) {
+    return [candidate].filter(Boolean);
+  }
+
+  const normalized = normalizeSnapshotValue(candidate);
+  const results = [normalized];
+
+  const mountpoint = process.pkg?.mountpoint;
+  if (mountpoint) {
+    const resolvedMount = path.resolve(mountpoint);
+    const relative = normalized.slice(SNAPSHOT_PREFIX.length).replace(/^\/+/, '');
+    const expanded = path.join(resolvedMount, relative);
+    if (!results.includes(expanded)) {
+      results.unshift(expanded);
+    }
+  }
+
+  return results;
+};
+
+const joinWithRoot = (root, segments) => {
+  if (!root) {
+    return [];
+  }
+
+  const normalizedRoot = toAbsoluteIfPossible(root);
+  if (!normalizedRoot) {
+    return [];
+  }
+
+  if (isSnapshotPath(normalizedRoot)) {
+    const joined = segments.reduce(
+      (acc, segment) => path.posix.join(acc, segment),
+      normalizedRoot
+    );
+    return expandSnapshotCandidate(joined);
+  }
+
+  const joined = path.join(normalizedRoot, ...segments);
+  return [joined];
+};
 
 const addCandidate = (list, candidate) => {
-  if (!candidate) return list;
-  const resolved = path.resolve(candidate);
-  if (!list.some(item => item === resolved)) {
-    list.push(resolved);
+  const normalized = toAbsoluteIfPossible(candidate);
+  if (!normalized) {
+    return list;
   }
+
+  if (!list.includes(normalized)) {
+    list.push(normalized);
+  }
+
   return list;
 };
 
@@ -65,6 +156,9 @@ const buildAssetRoots = () => {
   const roots = [];
   addCandidate(roots, EXEC_ROOT);
   addCandidate(roots, SNAPSHOT_ROOT);
+  if (process.pkg?.mountpoint) {
+    addCandidate(roots, process.pkg.mountpoint);
+  }
   addCandidate(roots, ROOT_HINT);
   addCandidate(roots, MODULE_ROOT);
   if (!process.pkg) {
@@ -78,16 +172,29 @@ const DEBUG_PATHS = process.env.AGENTFLOW_DEBUG_PATHS === '1';
 
 function resolveFromAssetRoots(segments) {
   for (const root of ASSET_ROOTS) {
-    const candidate = path.join(root, ...segments);
-    const exists = fs.existsSync(candidate);
-    if (DEBUG_PATHS) {
-      console.log('[AgentFlow][Paths][probe]', candidate, exists);
-    }
-    if (exists) {
-      return candidate;
+    const candidates = joinWithRoot(root, segments);
+    for (const candidate of candidates) {
+      let exists = false;
+      try {
+        exists = fs.existsSync(candidate);
+      } catch (error) {
+        exists = false;
+        if (DEBUG_PATHS) {
+          console.log('[AgentFlow][Paths][probe-error]', candidate, error.message);
+        }
+      }
+
+      if (DEBUG_PATHS) {
+        console.log('[AgentFlow][Paths][probe]', candidate, exists);
+      }
+
+      if (exists) {
+        return candidate;
+      }
     }
   }
-  return path.join(EXEC_ROOT, ...segments);
+  const fallbackCandidates = joinWithRoot(EXEC_ROOT, segments);
+  return fallbackCandidates[0] || path.join(EXEC_ROOT, ...segments);
 }
 
 export const APP_ROOT = EXEC_ROOT;
@@ -133,3 +240,10 @@ if (DEBUG_PATHS) {
     }
   }
 }
+
+export const __testables = {
+  SNAPSHOT_PREFIX,
+  isSnapshotPath,
+  normalizeSnapshotValue,
+  joinWithRoot,
+};
