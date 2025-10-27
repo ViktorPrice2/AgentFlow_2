@@ -123,6 +123,7 @@ export class VideoAgent {
         resultData.final_video_prompt = `${resultData.final_video_prompt}\n\n${continuityGuidelines}`;
       }
       resultData.cinematic_continuity_guidelines = continuityGuidelines;
+      resultData.meta = { model: VIDEO_MODEL, tokens, prompt: promptToGemini };
 
       const costPerToken = 0.0000005;
       const cost = tokens * costPerToken;

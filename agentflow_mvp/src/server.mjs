@@ -175,6 +175,11 @@ const determineAgentTypeForScheduleItem = scheduleItem => {
 };
 
 const composeSchedulePrompt = (scheduleItem, task) => {
+  const manualPrompt = typeof scheduleItem?.manual_prompt === 'string' ? scheduleItem.manual_prompt.trim() : '';
+  if (manualPrompt) {
+    return manualPrompt;
+  }
+
   const typeLabel = scheduleItem?.type || 'контент';
   const channel = scheduleItem?.channel || 'основного канала';
   const promptParts = [
@@ -393,6 +398,14 @@ app.post('/api/tasks/:taskId/schedule/update', (req, res) => {
     return res.status(400).json({ success: false, message: 'Index is required and must be a valid integer.' });
   }
 
+  if (typeof updates.content_prompt === 'string') {
+    updates.manual_prompt = updates.content_prompt;
+    delete updates.content_prompt;
+  }
+  if (typeof updates.manual_prompt === 'string') {
+    updates.manual_prompt = updates.manual_prompt.trim();
+  }
+
   const updatedItem = TaskStore.updateScheduleItem(taskId, parsedIndex, updates);
   if (!updatedItem) {
     return res.status(404).json({ success: false, message: 'Schedule item not found.' });
@@ -456,20 +469,28 @@ app.post('/api/tasks/:taskId/schedule/generate/:index', async (req, res) => {
 
   const agentType = determineAgentTypeForScheduleItem(scheduleItem);
   const promptText = composeSchedulePrompt(scheduleItem, task);
-  const scheduleContext = buildScheduleContext(scheduleItem, promptText);
+  const normalizedPrompt = typeof promptText === 'string' ? promptText.trim() : '';
+  const modelLabel = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  const promptHistoryEntry = normalizedPrompt ? `[API CALL] Calling REAL ${modelLabel} for prompt: ${normalizedPrompt}` : '';
+  const promptHistory = Array.isArray(scheduleItem?.prompt_history) ? [...scheduleItem.prompt_history] : [];
+  if (promptHistoryEntry) {
+    promptHistory.push(promptHistoryEntry);
+  }
+  const promptForExecution = normalizedPrompt || promptText || '';
+  const scheduleContext = buildScheduleContext(scheduleItem, promptForExecution);
   const tone = scheduleItem?.tone || getTaskDefaultTone(task) || 'enthusiastic';
   const topic = scheduleItem?.topic || getTaskDefaultTopic(task) || task?.name || 'кампанию';
 
   const inputData = {
     topic,
     tone,
-    promptOverride: promptText,
-    description: promptText,
+    promptOverride: promptForExecution,
+    description: promptForExecution,
     scheduleContext,
   };
 
   if (agentType === 'ImageAgent') {
-    inputData.description = promptText;
+    inputData.description = promptForExecution;
   }
 
   if (agentType === 'VideoAgent') {
@@ -487,6 +508,8 @@ app.post('/api/tasks/:taskId/schedule/generate/:index', async (req, res) => {
   TaskStore.updateScheduleItem(taskId, parsedIndex, {
     status: 'CONTENT_GENERATING',
     generation_error: null,
+    prompt_history: promptHistory,
+    last_prompt: normalizedPrompt || promptForExecution,
   });
   broadcastTaskUpdate(taskId);
 

@@ -130,8 +130,13 @@ export class ProductAnalysisAgent {
         cost,
       });
 
-      TaskStore.updateNodeStatus(nodeId, 'SUCCESS', normalized, cost);
-      return normalized;
+      const resultPayload = {
+        ...normalized,
+        meta: { model: ANALYSIS_MODEL, tokens, prompt },
+      };
+
+      TaskStore.updateNodeStatus(nodeId, 'SUCCESS', resultPayload, cost);
+      return resultPayload;
     } catch (error) {
       logger.logStep(nodeId, 'ERROR', { message: error.message });
       TaskStore.updateNodeStatus(nodeId, 'FAILED', { error: error.message });

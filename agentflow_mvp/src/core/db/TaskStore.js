@@ -41,6 +41,11 @@ function normalizeScheduleItem(item) {
           ? candidate.content_prompt
           : clone(candidate.content_prompt)
         : null,
+    prompt_history: Array.isArray(candidate.prompt_history)
+      ? candidate.prompt_history.map(entry => (entry === null || entry === undefined ? '' : String(entry)))
+      : [],
+    manual_prompt: typeof candidate.manual_prompt === 'string' ? candidate.manual_prompt : '',
+    last_prompt: typeof candidate.last_prompt === 'string' ? candidate.last_prompt : '',
     image_prompt:
       candidate.image_prompt !== undefined
         ? typeof candidate.image_prompt === 'string'
@@ -275,6 +280,26 @@ export class TaskStore {
       const rawContent = updates.content;
       target.content = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent ?? '');
       delete updates.content;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updates, 'prompt_history')) {
+      const history = updates.prompt_history;
+      if (Array.isArray(history)) {
+        target.prompt_history = history.map(entry => (entry === null || entry === undefined ? '' : String(entry)));
+      }
+      delete updates.prompt_history;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updates, 'manual_prompt')) {
+      const manual = updates.manual_prompt;
+      target.manual_prompt = typeof manual === 'string' ? manual : '';
+      delete updates.manual_prompt;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updates, 'last_prompt')) {
+      const last = updates.last_prompt;
+      target.last_prompt = typeof last === 'string' ? last : '';
+      delete updates.last_prompt;
     }
 
     Object.assign(target, updates);

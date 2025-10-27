@@ -37,7 +37,7 @@ export class ImageAgent {
       const resultData = {
         finalImagePrompt: finalImagePrompt.trim(),
         instruction: 'Используйте этот промпт для генерации изображения во внешнем сервисе.',
-        metadata: { model: IMAGE_MODEL, tokens },
+        metadata: { model: IMAGE_MODEL, tokens, prompt: promptToGemini },
       };
 
       logger.logStep(nodeId, 'END', { status: 'SUCCESS', prompt: finalImagePrompt.substring(0, 50) });

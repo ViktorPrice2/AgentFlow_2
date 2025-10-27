@@ -638,6 +638,68 @@
             min-height: 56px;
         }
 
+        .schedule-top-actions {
+            margin-left: auto;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .prompt-history {
+            margin-bottom: 8px;
+            border: 1px solid rgba(148, 163, 184, 0.3);
+            border-radius: 10px;
+            padding: 10px;
+            background: rgba(241, 245, 249, 0.45);
+        }
+
+        .prompt-history > summary {
+            cursor: pointer;
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-soft);
+            font-weight: 600;
+        }
+
+        .prompt-history-item {
+            border-top: 1px solid rgba(148, 163, 184, 0.2);
+            padding-top: 6px;
+            margin-top: 6px;
+        }
+
+        .prompt-history-item:first-of-type {
+            border-top: none;
+            padding-top: 0;
+            margin-top: 0;
+        }
+
+        .prompt-history-item span {
+            display: block;
+            font-size: 0.75rem;
+            color: var(--text-soft);
+            margin-bottom: 4px;
+        }
+
+        .prompt-history pre {
+            margin: 0;
+            font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+            font-size: 0.82rem;
+            white-space: pre-wrap;
+            word-break: break-word;
+            color: var(--text-secondary);
+        }
+
+        .prompt-history-empty {
+            margin-bottom: 8px;
+            font-size: 0.8rem;
+            color: var(--text-soft);
+            background: rgba(241, 245, 249, 0.45);
+            border: 1px dashed rgba(148, 163, 184, 0.35);
+            border-radius: 10px;
+            padding: 10px;
+        }
+
         .metrics-box {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
@@ -911,6 +973,10 @@
                     Дополнительные инструкции
                     <textarea id="formatNotes" class="format-notes" placeholder="Стиль, ключевые сообщения, ограничения..."></textarea>
                 </label>
+                <label class="input-group">
+                    Предпросмотр промпта
+                    <textarea id="taskPromptPreview" class="format-notes" readonly placeholder="Промпт появится после генерации расписания."></textarea>
+                </label>
             </div>
             <button id="startTaskBtn">🚀 Запустить AgentFlow</button>
         </section>
@@ -969,6 +1035,7 @@
         const formatChannel = document.getElementById('formatChannel');
         const formatCTA = document.getElementById('formatCTA');
         const formatNotes = document.getElementById('formatNotes');
+        const taskPromptPreview = document.getElementById('taskPromptPreview');
         const proxyForm = document.getElementById('proxyForm');
         const proxyHost = document.getElementById('proxyHost');
         const proxyHttpPort = document.getElementById('proxyHttpPort');
@@ -1184,6 +1251,30 @@
             const date = new Date(timestamp);
             if (Number.isNaN(date.getTime())) return '';
             return date.toLocaleString();
+        }
+
+        function updatePromptPreviewFromSchedule(scheduleItems = []) {
+            if (!taskPromptPreview) {
+                return;
+            }
+
+            const previewSource = (scheduleItems || []).find(entry => {
+                const manualValue = typeof entry?.manual_prompt === 'string' && entry.manual_prompt.trim();
+                const lastValue = typeof entry?.last_prompt === 'string' && entry.last_prompt.trim();
+                const historyValue = Array.isArray(entry?.prompt_history) && entry.prompt_history.length;
+                return manualValue || lastValue || historyValue;
+            }) || null;
+
+            if (previewSource) {
+                const manualValue = typeof previewSource.manual_prompt === 'string' && previewSource.manual_prompt.trim() ? previewSource.manual_prompt : '';
+                const lastValue = typeof previewSource.last_prompt === 'string' && previewSource.last_prompt.trim() ? previewSource.last_prompt : '';
+                const historyValue = Array.isArray(previewSource.prompt_history) && previewSource.prompt_history.length
+                    ? previewSource.prompt_history[previewSource.prompt_history.length - 1]
+                    : '';
+                taskPromptPreview.value = manualValue || lastValue || historyValue || '';
+            } else {
+                taskPromptPreview.value = '';
+            }
         }
 
         function drawNetwork(nodesData, taskId) {
@@ -1467,15 +1558,20 @@
         }
 
         function getInitialPrompt(node) {
+            const resultPrompt = node.result_data?.meta?.prompt || node.result_data?.meta?.promptOverride;
+            if (resultPrompt) {
+                return resultPrompt;
+            }
+
             const originalInput = node.input_data || {};
             if (node.agent_type === 'WriterAgent') {
-                 return originalInput.promptOverride || `Write an ${originalInput.tone} article about ${originalInput.topic}.`;
+                return originalInput.promptOverride || `Write an ${originalInput.tone} article about ${originalInput.topic}.`;
             }
             if (node.agent_type === 'ImageAgent') {
-                 return originalInput.promptOverride || originalInput.description || 'Key visual for the campaign';
+                return originalInput.promptOverride || originalInput.description || 'Key visual for the campaign';
             }
             if (node.agent_type === 'StrategyAgent') {
-                 return JSON.stringify({ topic: originalInput.topic, format: originalInput.format }, null, 2);
+                return JSON.stringify({ topic: originalInput.topic, format: originalInput.format }, null, 2);
             }
             return JSON.stringify(originalInput, null, 2);
         }
@@ -1716,6 +1812,57 @@
                 return;
             }
 
+            const scheduleBaseDate = new Date();
+            scheduleBaseDate.setHours(0, 0, 0, 0);
+
+            const parseScheduleDate = (value) => {
+                if (!value) {
+                    return null;
+                }
+                if (value instanceof Date && !Number.isNaN(value.getTime())) {
+                    return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+                }
+                const trimmed = String(value).trim();
+                if (!trimmed) {
+                    return null;
+                }
+                const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+                if (isoMatch) {
+                    const [, year, month, day] = isoMatch.map(Number);
+                    return new Date(year, month - 1, day);
+                }
+                const localizedMatch = trimmed.match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})$/);
+                if (localizedMatch) {
+                    const [, day, month, year] = localizedMatch.map(Number);
+                    return new Date(year, month - 1, day);
+                }
+                const parsed = new Date(trimmed);
+                if (!Number.isNaN(parsed.getTime())) {
+                    return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+                }
+                return null;
+            };
+
+            const formatDateForInput = (date) => {
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            };
+            const ensureScheduleDate = (value, index) => {
+                const parsed = parseScheduleDate(value);
+                if (parsed && parsed.getTime() >= scheduleBaseDate.getTime()) {
+                    return formatDateForInput(parsed);
+                }
+                const fallbackDate = new Date(scheduleBaseDate);
+                fallbackDate.setDate(fallbackDate.getDate() + index);
+                return formatDateForInput(fallbackDate);
+            };
+            currentSchedule = currentSchedule.map((item, index) => ({
+                ...item,
+                date: ensureScheduleDate(item.date, index)
+            }));
+
             const pausedHumanGateNode = Array.from(nodes || []).find(node => node.agent_type === 'HumanGateAgent' && node.status === 'PAUSED');
             const awaitingHumanInput = Boolean(pausedHumanGateNode);
             const hasHumanGate = (nodes || []).some(node => node.agent_type === 'HumanGateAgent');
@@ -1723,10 +1870,9 @@
             const humanGateCompleted = (nodes || []).some(node => node.agent_type === 'HumanGateAgent' && node.status === 'SUCCESS');
             const generatorEnabled = awaitingHumanInput || humanGateCompleted || !hasHumanGate || strategyReady;
             const planEditable = awaitingHumanInput || (!hasHumanGate || humanGateCompleted);
-            const metricsEditable = humanGateCompleted || !hasHumanGate;
 
             const planDisabledAttr = planEditable ? '' : 'disabled';
-            const metricsDisabledAttr = metricsEditable ? '' : 'disabled';
+            const metricsDisabledAttr = '';
 
             const statusNotice = awaitingHumanInput
                 ? 'Расписание ожидает подтверждения. Можно корректировать план перед запуском.'
@@ -1770,6 +1916,20 @@
                 const safeTopic = escapeHtml(topicValue);
                 const safeObjective = escapeHtml(objectiveValue);
                 const safeNotes = escapeHtml(notesValue);
+                const promptHistoryList = Array.isArray(item.prompt_history) ? item.prompt_history : [];
+                const manualPromptRaw = typeof item.manual_prompt === 'string' ? item.manual_prompt : '';
+                const lastPromptRaw = typeof item.last_prompt === 'string' ? item.last_prompt : '';
+                const latestHistoryPrompt = promptHistoryList.length ? promptHistoryList[promptHistoryList.length - 1] : '';
+                const manualPromptValue = manualPromptRaw || lastPromptRaw || latestHistoryPrompt || '';
+                const safeManualPrompt = escapeHtml(manualPromptValue);
+                const promptHistoryMarkup = promptHistoryList.length
+                    ? `<details class="prompt-history" open><summary>История промптов (${promptHistoryList.length})</summary>${promptHistoryList.map((entry, historyIndex) => `
+                            <div class="prompt-history-item">
+                                <span>Промпт ${historyIndex + 1}</span>
+                                <pre>${escapeHtml(entry)}</pre>
+                            </div>
+                        `).join('')}</details>`
+                    : '<div class="prompt-history-empty">История промптов пока пуста</div>';
 
                 const safeGeneratedAt = escapeHtml(generatedAt);
                 const generatedLabel = safeGeneratedAt ? `<span class="content-timestamp">Обновлено: ${safeGeneratedAt}</span>` : '';
@@ -1789,6 +1949,8 @@
 
                 const isGenerating = ['CONTENT_GENERATING', 'GENERATING', 'IN_PROGRESS'].includes((item.status || '').toUpperCase());
                 const generatorDisabledAttr = generatorEnabled && !isGenerating ? '' : 'disabled';
+                const manualPromptField = `<textarea class="inline-textarea small" data-index="${index}" data-field="manual_prompt" onchange="updateScheduleStat(this, '${taskId}')">${safeManualPrompt}</textarea>`;
+                const generatorButton = `<button class="secondary" data-action="generate-content" data-index="${index}" ${generatorDisabledAttr}>Regenerate</button>`;
 
                 const contentBlock = contentData.hasContent
                     ? buildContentText(contentFull)
@@ -1816,6 +1978,9 @@
                                     ${channelField}
                                 </div>
                             </div>
+                            <div class="schedule-top-actions">
+                                ${generatorButton}
+                            </div>
                         </div>
                         <div class="schedule-body">
                             <div class="schedule-column">
@@ -1831,6 +1996,11 @@
                                     <label>Заметки</label>
                                     ${notesField}
                                 </div>
+                                <div class="schedule-field">
+                                    <label>Content Prompt</label>
+                                    ${promptHistoryMarkup}
+                                    ${manualPromptField}
+                                </div>
                             </div>
                             <div class="schedule-column">
                                 <div class="content-card">
@@ -1838,7 +2008,6 @@
                                         <span class="status-pill ${statusInfo.className}">${statusInfo.label}</span>
                                         ${generatedLabel}
                                         ${nodeLabel}
-                                        <button class="secondary" data-action="generate-content" data-index="${index}" ${generatorDisabledAttr}>⚙️ Сгенерировать</button>
                                     </div>
                                     ${contentBlock}
                                     ${errorBlock}
@@ -1872,6 +2041,8 @@
 
             scheduleContainer.innerHTML = html;
 
+            updatePromptPreviewFromSchedule(currentSchedule);
+
             scheduleContainer.querySelectorAll('[data-action="generate-content"]').forEach(button => {
                 if (button.hasAttribute('disabled')) {
                     return;
@@ -1897,7 +2068,50 @@
                 return;
             }
 
-            const labels = schedule.map((item, index) => item.date || `День ${index + 1}`);
+            const chartBaseDate = new Date();
+            chartBaseDate.setHours(0, 0, 0, 0);
+            const parseChartDate = value => {
+                if (!value) {
+                    return null;
+                }
+                if (value instanceof Date && !Number.isNaN(value.getTime())) {
+                    return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+                }
+                const trimmed = String(value).trim();
+                if (!trimmed) {
+                    return null;
+                }
+                const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+                if (isoMatch) {
+                    const [, year, month, day] = isoMatch.map(Number);
+                    return new Date(year, month - 1, day);
+                }
+                const localizedMatch = trimmed.match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})$/);
+                if (localizedMatch) {
+                    const [, day, month, year] = localizedMatch.map(Number);
+                    return new Date(year, month - 1, day);
+                }
+                const parsed = new Date(trimmed);
+                if (!Number.isNaN(parsed.getTime())) {
+                    return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+                }
+                return null;
+            };
+            const formatChartDate = date => {
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            };
+            const labels = schedule.map((item, index) => {
+                const parsed = parseChartDate(item?.date);
+                if (parsed && parsed.getTime() >= chartBaseDate.getTime()) {
+                    return formatChartDate(parsed);
+                }
+                const fallback = new Date(chartBaseDate);
+                fallback.setDate(fallback.getDate() + index);
+                return formatChartDate(fallback);
+            });
             const views = schedule.map(item => Number(item.views) || 0);
             const likes = schedule.map(item => Number(item.likes) || 0);
 
@@ -1987,6 +2201,7 @@
                 if (data.scheduleItem) {
                     currentSchedule[index] = data.scheduleItem;
                     updateScheduleChart(currentSchedule);
+                    updatePromptPreviewFromSchedule(currentSchedule);
                 }
             } catch (error) {
                 alert(error.message || 'Ошибка при обновлении расписания.');

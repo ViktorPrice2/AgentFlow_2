@@ -177,6 +177,7 @@ export class StrategyAgent {
       const strategyResult = {
         schedule,
         summary: parsed.summary || '',
+        meta: { model: STRATEGY_MODEL, tokens, prompt },
       };
 
       TaskStore.updateTaskSchedule(node.taskId, schedule);

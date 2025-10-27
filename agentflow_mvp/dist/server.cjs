@@ -41432,6 +41432,9 @@ function normalizeScheduleItem(item) {
     content: typeof candidate.content === "string" ? candidate.content : "",
     content_prompt: candidate.content_prompt !== void 0 ? typeof candidate.content_prompt === "string" ? candidate.content_prompt : clone(candidate.content_prompt) : null,
     image_prompt: candidate.image_prompt !== void 0 ? typeof candidate.image_prompt === "string" ? candidate.image_prompt : clone(candidate.image_prompt) : null,
+    prompt_history: Array.isArray(candidate.prompt_history) ? candidate.prompt_history.map((entry) => entry === null || entry === void 0 ? "" : String(entry)) : [],
+    manual_prompt: typeof candidate.manual_prompt === "string" ? candidate.manual_prompt : "",
+    last_prompt: typeof candidate.last_prompt === "string" ? candidate.last_prompt : "",
     status: candidate.status || "PLANNED_CONTENT",
     last_generated_at: candidate.last_generated_at || null,
     last_generated_id: candidate.last_generated_id || null,
@@ -41629,6 +41632,23 @@ var init_TaskStore = __esm({
           const rawContent = updates.content;
           target.content = typeof rawContent === "string" ? rawContent : JSON.stringify(rawContent ?? "");
           delete updates.content;
+        }
+        if (Object.prototype.hasOwnProperty.call(updates, "prompt_history")) {
+          const history = updates.prompt_history;
+          if (Array.isArray(history)) {
+            target.prompt_history = history.map((entry) => entry === null || entry === void 0 ? "" : String(entry));
+          }
+          delete updates.prompt_history;
+        }
+        if (Object.prototype.hasOwnProperty.call(updates, "manual_prompt")) {
+          const manual = updates.manual_prompt;
+          target.manual_prompt = typeof manual === "string" ? manual : "";
+          delete updates.manual_prompt;
+        }
+        if (Object.prototype.hasOwnProperty.call(updates, "last_prompt")) {
+          const last = updates.last_prompt;
+          target.last_prompt = typeof last === "string" ? last : "";
+          delete updates.last_prompt;
         }
         Object.assign(target, updates);
         _TaskStore.saveToDisk();
@@ -86497,7 +86517,7 @@ var init_ImageAgent = __esm({
           const resultData = {
             finalImagePrompt: finalImagePrompt.trim(),
             instruction: "\u0418\u0441\u043F\u043E\u043B\u044C\u0437\u0443\u0439\u0442\u0435 \u044D\u0442\u043E\u0442 \u043F\u0440\u043E\u043C\u043F\u0442 \u0434\u043B\u044F \u0433\u0435\u043D\u0435\u0440\u0430\u0446\u0438\u0438 \u0438\u0437\u043E\u0431\u0440\u0430\u0436\u0435\u043D\u0438\u044F \u0432\u043E \u0432\u043D\u0435\u0448\u043D\u0435\u043C \u0441\u0435\u0440\u0432\u0438\u0441\u0435.",
-            metadata: { model: IMAGE_MODEL, tokens }
+            metadata: { model: IMAGE_MODEL, tokens, prompt: promptToGemini }
           };
           logger.logStep(nodeId, "END", { status: "SUCCESS", prompt: finalImagePrompt.substring(0, 50) });
           TaskStore.updateNodeStatus(nodeId, "SUCCESS", resultData);
@@ -86639,6 +86659,7 @@ var init_VideoAgent = __esm({
 ${continuityGuidelines}`;
           }
           resultData.cinematic_continuity_guidelines = continuityGuidelines;
+          resultData.meta = { model: VIDEO_MODEL, tokens, prompt: promptToGemini };
           const costPerToken = 5e-7;
           const cost = tokens * costPerToken;
           logger.logStep(nodeId, "END", { status: "SUCCESS", storyboard_scenes: resultData.scenes?.length || 0, cost });
@@ -87149,8 +87170,12 @@ var init_ProductAnalysisAgent = __esm({
             channels: normalized.channels.length,
             cost
           });
-          TaskStore.updateNodeStatus(nodeId, "SUCCESS", normalized, cost);
-          return normalized;
+          const resultPayload = {
+            ...normalized,
+            meta: { model: ANALYSIS_MODEL, tokens, prompt }
+          };
+          TaskStore.updateNodeStatus(nodeId, "SUCCESS", resultPayload, cost);
+          return resultPayload;
         } catch (error) {
           logger.logStep(nodeId, "ERROR", { message: error.message });
           TaskStore.updateNodeStatus(nodeId, "FAILED", { error: error.message });
@@ -87316,7 +87341,8 @@ var init_StrategyAgent = __esm({
           const schedule = normalizeSchedule(parsed.schedule);
           const strategyResult = {
             schedule,
-            summary: parsed.summary || ""
+            summary: parsed.summary || "",
+            meta: { model: STRATEGY_MODEL, tokens, prompt }
           };
           TaskStore.updateTaskSchedule(node.taskId, schedule);
           const cost = tokens * 5e-7;
@@ -88097,6 +88123,13 @@ app.post("/api/tasks/:taskId/schedule/update", (req, res) => {
   if (!Number.isInteger(parsedIndex) || parsedIndex < 0) {
     return res.status(400).json({ success: false, message: "Index is required and must be a valid integer." });
   }
+  if (typeof updates.content_prompt === "string") {
+    updates.manual_prompt = updates.content_prompt;
+    delete updates.content_prompt;
+  }
+  if (typeof updates.manual_prompt === "string") {
+    updates.manual_prompt = updates.manual_prompt.trim();
+  }
   const updatedItem = TaskStore.updateScheduleItem(taskId, parsedIndex, updates);
   if (!updatedItem) {
     return res.status(404).json({ success: false, message: "Schedule item not found." });
@@ -88145,14 +88178,22 @@ app.post("/api/tasks/:taskId/schedule/generate/:index", async (req, res) => {
   }
   const agentType = determineAgentTypeForScheduleItem(scheduleItem);
   const promptText = composeSchedulePrompt(scheduleItem, task);
-  const scheduleContext = buildScheduleContext(scheduleItem, promptText);
+  const normalizedPrompt = typeof promptText === "string" ? promptText.trim() : "";
+  const modelLabel = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  const promptHistoryEntry = normalizedPrompt ? `[API CALL] Calling REAL ${modelLabel} for prompt: ${normalizedPrompt}` : "";
+  const promptHistory = Array.isArray(scheduleItem?.prompt_history) ? [...scheduleItem.prompt_history] : [];
+  if (promptHistoryEntry) {
+    promptHistory.push(promptHistoryEntry);
+  }
+  const promptForExecution = normalizedPrompt || promptText || "";
+  const scheduleContext = buildScheduleContext(scheduleItem, promptForExecution);
   const tone = scheduleItem?.tone || getTaskDefaultTone(task) || "enthusiastic";
   const topic = scheduleItem?.topic || getTaskDefaultTopic(task) || task?.name || "\u043A\u0430\u043C\u043F\u0430\u043D\u0438\u044E";
   const inputData = {
     topic,
     tone,
-    promptOverride: promptText,
-    description: promptText,
+    promptOverride: promptForExecution,
+    description: promptForExecution,
     scheduleContext
   };
   if (agentType === "ImageAgent") {
@@ -88170,7 +88211,9 @@ app.post("/api/tasks/:taskId/schedule/generate/:index", async (req, res) => {
   }
   TaskStore.updateScheduleItem(taskId, parsedIndex, {
     status: "CONTENT_GENERATING",
-    generation_error: null
+    generation_error: null,
+    prompt_history: promptHistory,
+    last_prompt: normalizedPrompt || promptForExecution
   });
   broadcastTaskUpdate(taskId);
   res.json({
