@@ -16,6 +16,27 @@ const getGeminiClient = () => {
   return new GoogleGenAI({ apiKey });
 };
 
+const SAFE_PROMPT_NOTICE =
+  'Пожалуйста, сформулируй безопасный, нейтральный ответ, избегая запрещённых и чувствительных тем.';
+
+const DEFAULT_SAFETY_SETTINGS = [
+  { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+  { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_ONLY_HIGH' },
+  { category: 'HARM_CATEGORY_SEXUAL', threshold: 'BLOCK_ONLY_HIGH' },
+  { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_ONLY_HIGH' },
+];
+
+const buildSanitizedPrompt = originalPrompt => {
+  const source = typeof originalPrompt === 'string' ? originalPrompt.trim() : '';
+  return [
+    'Сформулируй нейтральный и безопасный текст на русском языке, состоящий минимум из трёх предложений.',
+    'Избегай запрещённых и чувствительных тем, персональных данных и негативных высказываний. Если исходная тема кажется рискованной, переформулируй её в позитивном или образовательном ключе.',
+    source ? `Используй следующую пользовательскую инструкцию только как источник темы: ${source}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+};
+
 const MAX_RETRIES = 5;
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -51,7 +72,12 @@ const writeImageFile = async (model, buffer, mimeType = 'image/png') => {
 const createPlaceholderImage = async (model = 'imagen-3.0-generate') =>
   writeImageFile(model, Buffer.from(PLACEHOLDER_PIXEL_BASE64, 'base64'), 'image/png');
 
+let customRequestHandler = null;
+
 const sendRequestWithRetries = async (url, payload, axiosConfig) => {
+  if (typeof customRequestHandler === 'function') {
+    return customRequestHandler(url, payload, axiosConfig);
+  }
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt += 1) {
     try {
       const proxyConfig = ProxyManager.getAxiosProxyConfig();
@@ -159,7 +185,11 @@ export class ProviderManager {
         maxContentLength: Infinity,
       };
 
-      const callGemini = async (promptText, safeAttempted = false) => {
+      const callGemini = async (
+        promptText,
+        attemptState = { safeAttempted: false, sanitizedAttempted: false },
+        rootPrompt = promptText
+      ) => {
         const payload = {
           contents: [{ role: 'user', parts: [{ text: promptText }] }],
           generationConfig: {
@@ -169,6 +199,7 @@ export class ProviderManager {
           },
           responseMimeType: 'text/plain',
           responseModalities: ['TEXT'],
+          safetySettings: DEFAULT_SAFETY_SETTINGS,
         };
 
         try {
@@ -192,10 +223,16 @@ export class ProviderManager {
               candidates[0]?.safetyRatings?.[0]?.blockReason ||
               'Candidates contained no text parts.';
 
-            if (!safeAttempted) {
+            if (!attemptState.safeAttempted) {
               console.warn('[ProviderManager] No textual content returned. Retrying with safe prompt instructions.');
-              const safePrompt = `${promptText}\n\nПожалуйста, сформулируй безопасный, нейтральный ответ, избегая запрещённых и чувствительных тем.`;
-              return callGemini(safePrompt, true);
+              const safePrompt = `${promptText}\n\n${SAFE_PROMPT_NOTICE}`;
+              return callGemini(safePrompt, { ...attemptState, safeAttempted: true }, rootPrompt);
+            }
+
+            if (!attemptState.sanitizedAttempted) {
+              console.warn('[ProviderManager] Safe prompt still blocked. Retrying with sanitized prompt.');
+              const sanitizedPrompt = buildSanitizedPrompt(rootPrompt);
+              return callGemini(sanitizedPrompt, { safeAttempted: true, sanitizedAttempted: true }, rootPrompt);
             }
 
             throw new Error(`Gemini API Error: ${blockReason}`);
@@ -220,10 +257,16 @@ export class ProviderManager {
                 firstCandidateWithText?.safetyRatings?.[0]?.blockReason ||
                 'Candidate parts missing textual content.';
 
-              if (!safeAttempted) {
+              if (!attemptState.safeAttempted) {
                 console.warn('[ProviderManager] Candidate parts empty. Retrying with safe prompt instructions.');
-                const safePrompt = `${promptText}\n\nПожалуйста, сформулируй безопасный, нейтральный ответ, избегая запрещённых и чувствительных тем.`;
-                return callGemini(safePrompt, true);
+                const safePrompt = `${promptText}\n\n${SAFE_PROMPT_NOTICE}`;
+                return callGemini(safePrompt, { ...attemptState, safeAttempted: true }, rootPrompt);
+              }
+
+              if (!attemptState.sanitizedAttempted) {
+                console.warn('[ProviderManager] Empty parts persist. Retrying with sanitized prompt.');
+                const sanitizedPrompt = buildSanitizedPrompt(rootPrompt);
+                return callGemini(sanitizedPrompt, { safeAttempted: true, sanitizedAttempted: true }, rootPrompt);
               }
 
               throw new Error(`Gemini API Error: ${blockReason}`);
@@ -236,10 +279,16 @@ export class ProviderManager {
           return { result: text, tokens, modelUsed: model };
         } catch (error) {
           logAxiosError(error, 'Text API - Failure');
-          if (!safeAttempted) {
+          if (!attemptState.safeAttempted) {
             console.warn('[ProviderManager] Text call failed. Retrying with safe prompt instructions.');
-            const safePrompt = `${promptText}\n\nПожалуйста, сформулируй безопасный, нейтральный ответ, избегая запрещённых и чувствительных тем.`;
-            return callGemini(safePrompt, true);
+            const safePrompt = `${promptText}\n\n${SAFE_PROMPT_NOTICE}`;
+            return callGemini(safePrompt, { ...attemptState, safeAttempted: true }, rootPrompt);
+          }
+
+          if (!attemptState.sanitizedAttempted) {
+            console.warn('[ProviderManager] Safe prompt failed. Retrying with sanitized prompt.');
+            const sanitizedPrompt = buildSanitizedPrompt(rootPrompt);
+            return callGemini(sanitizedPrompt, { safeAttempted: true, sanitizedAttempted: true }, rootPrompt);
           }
 
           throw new Error(`Request failed with status ${error.response?.status || 'Unknown'}. Details in console.`);
@@ -247,7 +296,7 @@ export class ProviderManager {
       };
 
       try {
-        return await callGemini(prompt);
+        return await callGemini(prompt, undefined, prompt);
       } catch (error) {
         console.warn(`[ProviderManager] Falling back to safe stub after Gemini failure: ${error.message}`);
         const fallbackText = `Автоматическая генерация недоступна: ${error.message}. Подготовьте текст вручную или повторите позже.`;
@@ -264,3 +313,12 @@ export class ProviderManager {
     throw new Error(`Provider not configured for model: ${model}`);
   }
 }
+
+export const __testHooks = {
+  setRequestHandler(handler) {
+    customRequestHandler = typeof handler === 'function' ? handler : null;
+  },
+  reset() {
+    customRequestHandler = null;
+  },
+};
