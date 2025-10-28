@@ -86319,7 +86319,7 @@ Error Status: ${error.response.status}`
         }
         if (getMockMode()) {
           const mockText = `MOCK: ${model} generated content for: ${prompt.substring(0, 50)}...`;
-          return { result: mockText, tokens: mockText.length / 4 };
+          return { result: mockText, tokens: mockText.length / 4, modelUsed: `${model || "mock"}-mock` };
         }
         if (model.includes("gemini") || model.includes("gpt")) {
           const apiKey = resolveGeminiApiKey();
@@ -86404,7 +86404,13 @@ Error Status: ${error.response.status}`
           } catch (error) {
             console.warn(`[ProviderManager] Falling back to safe stub after Gemini failure: ${error.message}`);
             const fallbackText = `\u0410\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0430\u044F \u0433\u0435\u043D\u0435\u0440\u0430\u0446\u0438\u044F \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u0430: ${error.message}. \u041F\u043E\u0434\u0433\u043E\u0442\u043E\u0432\u044C\u0442\u0435 \u0442\u0435\u043A\u0441\u0442 \u0432\u0440\u0443\u0447\u043D\u0443\u044E \u0438\u043B\u0438 \u043F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435 \u043F\u043E\u0437\u0436\u0435.`;
-            return { result: fallbackText, tokens: 0, modelUsed: `${model}-fallback`, warning: error.message };
+            return {
+              result: fallbackText,
+              tokens: 0,
+              modelUsed: `${model}-fallback`,
+              warning: error.message,
+              isFallback: true
+            };
           }
         }
         throw new Error(`Provider not configured for model: ${model}`);
@@ -86485,6 +86491,51 @@ var init_promptUtils = __esm({
   }
 });
 
+// src/utils/fallbackUtils.js
+var FALLBACK_PREFIXES, FALLBACK_KEYWORDS, isFallbackStubText, normalizeFallbackModel, ensureFallbackWarning;
+var init_fallbackUtils = __esm({
+  "src/utils/fallbackUtils.js"() {
+    FALLBACK_PREFIXES = [
+      "\u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0430\u044F \u0433\u0435\u043D\u0435\u0440\u0430\u0446\u0438\u044F \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u0430",
+      "automatic generation unavailable"
+    ];
+    FALLBACK_KEYWORDS = [
+      "\u0432\u043E\u0437\u043D\u0438\u043A\u043B\u0438 \u0441\u043B\u043E\u0436\u043D\u043E\u0441\u0442\u0438 \u0441 \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u043E\u0439 \u0433\u0435\u043D\u0435\u0440\u0430\u0446\u0438\u0435\u0439",
+      "\u0433\u043E\u0442\u043E\u0432 \u043F\u043E\u043C\u043E\u0447\u044C \u0432\u0430\u043C \u0441\u0444\u043E\u0440\u043C\u0443\u043B\u0438\u0440\u043E\u0432\u0430\u0442\u044C \u0442\u0435\u043A\u0441\u0442",
+      "\u0440\u0443\u0447\u043D\u0430\u044F \u043F\u043E\u0434\u0433\u043E\u0442\u043E\u0432\u043A\u0430 \u043A\u043E\u043D\u0442\u0435\u043D\u0442\u0430",
+      "manual content preparation"
+    ];
+    isFallbackStubText = (text) => {
+      if (typeof text !== "string") {
+        return false;
+      }
+      const normalized = text.trim().toLowerCase();
+      if (!normalized) {
+        return false;
+      }
+      if (FALLBACK_PREFIXES.some((prefix) => normalized.startsWith(prefix))) {
+        return true;
+      }
+      return FALLBACK_KEYWORDS.some((fragment) => normalized.includes(fragment));
+    };
+    normalizeFallbackModel = (model, isFallback) => {
+      if (!model) {
+        return model;
+      }
+      if (!isFallback) {
+        return model;
+      }
+      return /-fallback$/i.test(model) ? model : `${model}-fallback`;
+    };
+    ensureFallbackWarning = (warning, isFallback) => {
+      if (warning || !isFallback) {
+        return warning;
+      }
+      return "LLM \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u0430 \u2014 \u0442\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044F \u0440\u0443\u0447\u043D\u0430\u044F \u043F\u043E\u0434\u0433\u043E\u0442\u043E\u0432\u043A\u0430 \u043A\u043E\u043D\u0442\u0435\u043D\u0442\u0430.";
+    };
+  }
+});
+
 // src/agents/WriterAgent.js
 var WriterAgent_exports = {};
 __export(WriterAgent_exports, {
@@ -86498,6 +86549,7 @@ var init_WriterAgent = __esm({
     init_Logger();
     init_TaskStore();
     init_promptUtils();
+    init_fallbackUtils();
     DEFAULT_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
     WriterAgent = class {
       static async execute(nodeId) {
@@ -86509,22 +86561,43 @@ var init_WriterAgent = __esm({
         logger.logStep(nodeId, "START", { message: "Generating text content" });
         const basePrompt = node.input_data?.promptOverride ? node.input_data.promptOverride : buildRussianArticlePrompt(node.input_data?.topic, node.input_data?.tone);
         try {
-          const { result: text, tokens } = await ProviderManager.invoke(DEFAULT_MODEL, basePrompt, "text");
+          const { result: text, tokens, modelUsed, warning, isFallback } = await ProviderManager.invoke(
+            DEFAULT_MODEL,
+            basePrompt,
+            "text"
+          );
+          const fallbackDetected = Boolean(isFallback) || isFallbackStubText(text) || isFallbackStubText(warning);
+          const normalizedModel = normalizeFallbackModel(modelUsed || DEFAULT_MODEL, fallbackDetected);
+          const normalizedWarning = ensureFallbackWarning(warning, fallbackDetected);
           const resultData = {
             text,
             meta: {
-              model: DEFAULT_MODEL,
+              model: normalizedModel || DEFAULT_MODEL,
               tokens,
-              prompt: basePrompt
+              prompt: basePrompt,
+              warning: normalizedWarning,
+              fallback: fallbackDetected
             }
           };
+          if (!resultData.meta.warning) {
+            delete resultData.meta.warning;
+          }
+          if (!resultData.meta.fallback) {
+            delete resultData.meta.fallback;
+          }
           const costPerToken = 5e-7;
           const cost = tokens * costPerToken;
-          logger.logStep(nodeId, "END", {
-            status: "SUCCESS",
+          const logSummary = {
             tokens,
             cost
-          });
+          };
+          if (resultData.meta?.fallback) {
+            logSummary.status = "FAILED";
+            logSummary.warning = resultData.meta.warning || "LLM fallback stub received.";
+          } else {
+            logSummary.status = "SUCCESS";
+          }
+          logger.logStep(nodeId, "END", logSummary);
           TaskStore.updateNodeStatus(nodeId, "SUCCESS", resultData, cost);
           return resultData;
         } catch (error) {
@@ -86834,6 +86907,7 @@ var init_GuardAgent = __esm({
     init_loadEnv();
     init_Logger();
     init_TaskStore();
+    init_fallbackUtils();
     forcedFailureConsumed = false;
     FORMAL_MARKERS = [
       "\u0443\u0432\u0430\u0436\u0430\u0435\u043C",
@@ -86938,7 +87012,8 @@ var init_GuardAgent = __esm({
         logger.logStep(nodeId, "START", { message: `Validating previous node for: ${node.input_data.check}` });
         const prevNodeId = node.dependsOn[0];
         const prevResult = prevNodeId ? TaskStore.getResult(prevNodeId) : null;
-        const contentToValidate = prevResult?.text || prevResult?.imagePath || "No Content";
+        const upstreamText = typeof prevResult?.text === "string" ? prevResult.text : "";
+        const contentToValidate = upstreamText || prevResult?.imagePath || "No Content";
         const dependencyNode = prevNodeId ? TaskStore.getNode(prevNodeId) : null;
         try {
           const flag = (process.env.FORCE_GUARD_FAIL || "false").toLowerCase();
@@ -86950,11 +87025,20 @@ var init_GuardAgent = __esm({
             return { status: "FAILED", reason };
           }
           let failureReason = null;
-          if (node.input_data.check === "tone") {
+          const upstreamMeta = prevResult?.meta;
+          const metaFallback = upstreamMeta?.fallback || /-fallback$/i.test(upstreamMeta?.model || "");
+          const textFallback = isFallbackStubText(upstreamText);
+          const warningFallback = isFallbackStubText(upstreamMeta?.warning);
+          const promptFallback = isFallbackStubText(upstreamMeta?.prompt);
+          if (metaFallback || textFallback || warningFallback || promptFallback) {
+            const warningMessage = typeof upstreamMeta?.warning === "string" && upstreamMeta.warning.trim() || (textFallback ? upstreamText : "") || (promptFallback ? upstreamMeta?.prompt : "");
+            failureReason = warningMessage ? `LLM_FALLBACK: ${warningMessage}` : "LLM_FALLBACK: \u0410\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0430\u044F \u0433\u0435\u043D\u0435\u0440\u0430\u0446\u0438\u044F \u043D\u0435 \u0432\u0435\u0440\u043D\u0443\u043B\u0430 \u0433\u043E\u0442\u043E\u0432\u044B\u0439 \u043A\u043E\u043D\u0442\u0435\u043D\u0442.";
+          }
+          if (!failureReason && node.input_data.check === "tone") {
             const expectedTone = dependencyNode?.input_data?.tone;
             failureReason = detectToneIssue(contentToValidate, expectedTone);
           }
-          if (node.input_data.check === "image_quality" && !prevResult?.imagePath) {
+          if (!failureReason && node.input_data.check === "image_quality" && !prevResult?.imagePath) {
             failureReason = "IMAGE_VALIDATION_FAILED: \u0438\u0437\u043E\u0431\u0440\u0430\u0436\u0435\u043D\u0438\u0435 \u043E\u0442\u0441\u0443\u0442\u0441\u0442\u0432\u0443\u0435\u0442 \u0438\u043B\u0438 \u043D\u0435 \u0431\u044B\u043B\u043E \u0441\u043E\u0437\u0434\u0430\u043D\u043E.";
           }
           if (failureReason) {
@@ -86994,6 +87078,7 @@ var init_RetryAgent = __esm({
     init_Logger();
     init_TaskStore();
     init_promptUtils();
+    init_fallbackUtils();
     RetryAgent = class {
       static async execute(nodeId, payload = {}) {
         const node = TaskStore.getNode(nodeId);
@@ -87038,9 +87123,21 @@ var init_RetryAgent = __esm({
         ].join(" ");
         try {
           const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-          const { result: newPromptText } = await ProviderManager.invoke(model, correctionPrompt, "text");
+          const { result: newPromptText, warning, isFallback } = await ProviderManager.invoke(
+            model,
+            correctionPrompt,
+            "text"
+          );
+          const trimmedPrompt = (newPromptText || "").trim();
+          const fallbackPrompt = !trimmedPrompt || Boolean(isFallback) || isFallbackStubText(trimmedPrompt) || isFallbackStubText(warning);
+          if (fallbackPrompt) {
+            const reasonMessage = "LLM_FALLBACK: \u041A\u043E\u0440\u0440\u0435\u043A\u0442\u043E\u0440 \u043D\u0435 \u0441\u043C\u043E\u0433 \u043F\u043E\u043B\u0443\u0447\u0438\u0442\u044C \u043D\u043E\u0432\u044B\u0439 \u043F\u0440\u043E\u043C\u043F\u0442 \u2014 \u0442\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044F \u0440\u0443\u0447\u043D\u043E\u0439 \u0432\u0432\u043E\u0434.";
+            logger.logStep(nodeId, "END", { status: "FAILED", reason: reasonMessage });
+            TaskStore.updateNodeStatus(nodeId, "FAILED", { reason: reasonMessage });
+            return;
+          }
           const updatedInput = clone2(originalInput);
-          updatedInput.promptOverride = newPromptText.trim();
+          updatedInput.promptOverride = trimmedPrompt;
           updatedInput.retryCount = (originalInput.retryCount || 0) + 1;
           const correctiveNode = TaskStore.createCorrectiveNode(dependencyId, updatedInput);
           if (!correctiveNode) {
@@ -87151,13 +87248,56 @@ function formatInstructionsToText(formatData) {
   };
   if (Array.isArray(formatData)) {
     const parts = formatData.map(normalizeEntry).filter(Boolean);
-    return parts.length ? ` \u0414\u043E\u043F\u043E\u043B\u043D\u0438\u0442\u0435\u043B\u044C\u043D\u043E \u0443\u0447\u0442\u0438 \u0444\u043E\u0440\u043C\u0430\u0442: ${parts.join("; ")}.` : "";
+    return parts.length ? ` \u0424\u043E\u0440\u043C\u0430\u0442 \u0438 \u043E\u0433\u0440\u0430\u043D\u0438\u0447\u0435\u043D\u0438\u044F: ${parts.join("; ")}.` : "";
   }
   if (typeof formatData === "object") {
     const parts = Object.entries(formatData).map(([key, value]) => `${key}: ${value}`.trim()).filter(Boolean);
-    return parts.length ? ` \u0414\u043E\u043F\u043E\u043B\u043D\u0438\u0442\u0435\u043B\u044C\u043D\u043E \u0443\u0447\u0442\u0438 \u0444\u043E\u0440\u043C\u0430\u0442: ${parts.join("; ")}.` : "";
+    return parts.length ? ` \u0424\u043E\u0440\u043C\u0430\u0442 \u0438 \u043E\u0433\u0440\u0430\u043D\u0438\u0447\u0435\u043D\u0438\u044F: ${parts.join("; ")}.` : "";
   }
-  return ` \u0414\u043E\u043F\u043E\u043B\u043D\u0438\u0442\u0435\u043B\u044C\u043D\u043E \u0443\u0447\u0442\u0438 \u0444\u043E\u0440\u043C\u0430\u0442: ${String(formatData).trim()}.`;
+  return ` \u0424\u043E\u0440\u043C\u0430\u0442 \u0438 \u043E\u0433\u0440\u0430\u043D\u0438\u0447\u0435\u043D\u0438\u044F: ${String(formatData).trim()}.`;
+}
+function buildFallbackAnalysis({ topic, baseText, distributionChannels = [] }) {
+  const defaultChannels = ["\u0421\u043E\u0446\u0441\u0435\u0442\u0438", "Email-\u0440\u0430\u0441\u0441\u044B\u043B\u043A\u0438", "\u041F\u0430\u0440\u0442\u043D\u0451\u0440\u0441\u043A\u0438\u0435 \u0438\u043D\u0442\u0435\u0433\u0440\u0430\u0446\u0438\u0438"];
+  const channels = distributionChannels.length ? distributionChannels : defaultChannels;
+  const insights = baseText ? [
+    `\u0418\u0441\u043F\u043E\u043B\u044C\u0437\u0443\u0439\u0442\u0435 \u043A\u043B\u044E\u0447\u0435\u0432\u044B\u0435 \u0438\u0434\u0435\u0438 \u0438\u0437 \u0443\u0442\u0432\u0435\u0440\u0436\u0434\u0451\u043D\u043D\u044B\u0445 \u043C\u0430\u0442\u0435\u0440\u0438\u0430\u043B\u043E\u0432: ${baseText.slice(0, 120)}...`,
+    "\u041F\u0440\u043E\u0432\u0435\u0434\u0438\u0442\u0435 A/B \u0442\u0435\u0441\u0442\u044B \u0434\u043B\u044F \u0443\u0442\u043E\u0447\u043D\u0435\u043D\u0438\u044F \u043C\u0435\u0441\u0441\u0435\u0434\u0436\u0438\u043D\u0433\u0430 \u0438 \u043A\u043E\u0440\u0440\u0435\u043A\u0442\u0438\u0440\u043E\u0432\u043A\u0438 KPI."
+  ] : [
+    "\u0421\u0444\u043E\u0440\u043C\u0443\u043B\u0438\u0440\u0443\u0439\u0442\u0435 \u0433\u0438\u043F\u043E\u0442\u0435\u0437\u044B \u043F\u043E \u043F\u043E\u0437\u0438\u0446\u0438\u043E\u043D\u0438\u0440\u043E\u0432\u0430\u043D\u0438\u044E \u0438 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u0435 \u0438\u0445 \u0431\u044B\u0441\u0442\u0440\u044B\u043C\u0438 \u0438\u0441\u0441\u043B\u0435\u0434\u043E\u0432\u0430\u043D\u0438\u044F\u043C\u0438.",
+    "\u0414\u043E\u0431\u0430\u0432\u044C\u0442\u0435 UGC/\u0441\u043E\u0446\u0438\u0430\u043B\u044C\u043D\u044B\u0435 \u0434\u043E\u043A\u0430\u0437\u0430\u0442\u0435\u043B\u044C\u0441\u0442\u0432\u0430, \u0447\u0442\u043E\u0431\u044B \u043F\u043E\u0432\u044B\u0441\u0438\u0442\u044C \u0434\u043E\u0432\u0435\u0440\u0438\u0435 \u0430\u0443\u0434\u0438\u0442\u043E\u0440\u0438\u0438."
+  ];
+  return {
+    kqm: [
+      `\u0423\u0432\u0435\u043B\u0438\u0447\u0438\u0442\u044C \u0443\u0437\u043D\u0430\u0432\u0430\u0435\u043C\u043E\u0441\u0442\u044C ${topic} \u0441\u0440\u0435\u0434\u0438 \u0446\u0435\u043B\u0435\u0432\u043E\u0439 \u0430\u0443\u0434\u0438\u0442\u043E\u0440\u0438\u0438`,
+      "\u0414\u043E\u0441\u0442\u0438\u0447\u044C \u0446\u0435\u043B\u0435\u0432\u043E\u0433\u043E CTR \u0438 \u0432\u043E\u0432\u043B\u0435\u0447\u0451\u043D\u043D\u043E\u0441\u0442\u0438 \u0432 \u043A\u043B\u044E\u0447\u0435\u0432\u044B\u0445 \u043A\u0430\u043D\u0430\u043B\u0430\u0445",
+      "\u0421\u043E\u0431\u0440\u0430\u0442\u044C \u043A\u0430\u0447\u0435\u0441\u0442\u0432\u0435\u043D\u043D\u044B\u0435 \u043B\u0438\u0434\u044B \u0438 \u0441\u0444\u043E\u0440\u043C\u0438\u0440\u043E\u0432\u0430\u0442\u044C \u043F\u043E\u0432\u0442\u043E\u0440\u043D\u044B\u0435 \u043A\u0430\u0441\u0430\u043D\u0438\u044F"
+    ],
+    channels,
+    insights,
+    meta: {
+      model: `${ANALYSIS_MODEL}-fallback`,
+      tokens: 0,
+      prompt: null,
+      warning: "LLM output unavailable. Generated heuristic fallback.",
+      fallback: true
+    }
+  };
+}
+function attachMeta(result, meta) {
+  if (!result.meta) {
+    result.meta = {};
+  }
+  Object.assign(result.meta, meta);
+  if (!result.meta.warning) {
+    delete result.meta.warning;
+  }
+  if (!result.meta.fallback) {
+    delete result.meta.fallback;
+  }
+  if (!result.meta.upstreamFallback) {
+    delete result.meta.upstreamFallback;
+  }
+  return result;
 }
 var ANALYSIS_MODEL, ProductAnalysisAgent;
 var init_ProductAnalysisAgent = __esm({
@@ -87166,6 +87306,7 @@ var init_ProductAnalysisAgent = __esm({
     init_ProviderManager();
     init_Logger();
     init_TaskStore();
+    init_fallbackUtils();
     ANALYSIS_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
     ProductAnalysisAgent = class {
       static async execute(nodeId) {
@@ -87177,7 +87318,11 @@ var init_ProductAnalysisAgent = __esm({
         logger.logStep(nodeId, "START", { message: "Analyzing product metrics and advertising channels" });
         const upstreamId = node.dependsOn?.[0];
         const upstreamResult = upstreamId ? TaskStore.getResult(upstreamId) : null;
-        const baseText = upstreamResult?.approvedContent || upstreamResult?.text || "";
+        const rawBaseText = upstreamResult?.approvedContent || upstreamResult?.text || "";
+        const baseText = typeof rawBaseText === "string" ? rawBaseText : "";
+        const upstreamMeta = upstreamResult?.meta || {};
+        const upstreamFallback = Boolean(upstreamMeta.fallback) || isFallbackStubText(baseText) || isFallbackStubText(upstreamMeta?.warning) || isFallbackStubText(upstreamMeta?.prompt);
+        const effectiveBaseText = upstreamFallback ? "" : baseText;
         const topic = node.input_data?.topic || "\u041F\u0440\u043E\u0434\u0443\u043A\u0442";
         const formatClause = formatInstructionsToText(node.input_data?.format);
         const campaignDuration = node.input_data?.campaign_duration || "1 \u043C\u0435\u0441\u044F\u0446";
@@ -87192,7 +87337,7 @@ var init_ProductAnalysisAgent = __esm({
               "Improve click-through rate across paid channels"
             ],
             channels: ["Email Drip", "Paid Social", "Influencer Collaborations"],
-            insights: baseText ? [`Leverage approved copy: ${baseText.slice(0, 80)}...`] : ["No upstream copy provided; generate fresh messaging."]
+            insights: effectiveBaseText ? [`Leverage approved copy: ${effectiveBaseText.slice(0, 80)}...`] : ["No upstream copy provided; generate fresh messaging."]
           };
           logger.logStep(nodeId, "END", {
             status: "SUCCESS",
@@ -87204,48 +87349,94 @@ var init_ProductAnalysisAgent = __esm({
           return stub;
         }
         const prompt = [
-          "\u0412\u044B \u2014 \u0441\u0442\u0430\u0440\u0448\u0438\u0439 \u043C\u0430\u0440\u043A\u0435\u0442\u0438\u043D\u0433\u043E\u0432\u044B\u0439 \u0430\u043D\u0430\u043B\u0438\u0442\u0438\u043A. \u041D\u0430 \u043E\u0441\u043D\u043E\u0432\u0435 \u0432\u0445\u043E\u0434\u043D\u044B\u0445 \u0434\u0430\u043D\u043D\u044B\u0445 \u043F\u043E\u0434\u0433\u043E\u0442\u043E\u0432\u044C \u043E\u0441\u043D\u043E\u0432\u0443 \u0434\u043B\u044F \u0441\u0442\u0440\u0430\u0442\u0435\u0433\u0438\u0438 \u043F\u0440\u043E\u0434\u0443\u043A\u0442\u0430.",
-          "\u0422\u0435\u043C\u0430 \u043A\u0430\u043C\u043F\u0430\u043D\u0438\u0438: " + topic + ".",
-          "\u0414\u043B\u0438\u0442\u0435\u043B\u044C\u043D\u043E\u0441\u0442\u044C \u043A\u0430\u043C\u043F\u0430\u043D\u0438\u0438: " + campaignDuration + ".",
-          "\u0426\u0435\u043B\u044C \u043A\u0430\u043C\u043F\u0430\u043D\u0438\u0438: " + campaignGoal + ".",
+          "\u0412\u044B \u2014 \u0441\u0442\u0430\u0440\u0448\u0438\u0439 \u0430\u043D\u0430\u043B\u0438\u0442\u0438\u043A \u043F\u043E \u043C\u0430\u0440\u043A\u0435\u0442\u0438\u043D\u0433\u0443. \u041D\u0430 \u043E\u0441\u043D\u043E\u0432\u0435 \u0432\u0445\u043E\u0434\u043D\u043E\u0433\u043E \u0442\u0435\u043A\u0441\u0442\u0430 \u0438 \u0442\u0435\u043C\u044B \u0441\u043E\u0441\u0442\u0430\u0432\u044C\u0442\u0435 \u043A\u0440\u0430\u0442\u043A\u0438\u0439 \u0430\u043D\u0430\u043B\u0438\u0437 \u043F\u0440\u043E\u0434\u0443\u043A\u0442\u0430.",
+          `\u0422\u0435\u043C\u0430 \u043F\u0440\u043E\u0434\u0443\u043A\u0442\u0430: ${topic}.`,
+          `\u0414\u043B\u0438\u0442\u0435\u043B\u044C\u043D\u043E\u0441\u0442\u044C \u043A\u0430\u043C\u043F\u0430\u043D\u0438\u0438: ${campaignDuration}.`,
+          `\u0426\u0435\u043B\u044C \u043A\u0430\u043C\u043F\u0430\u043D\u0438\u0438: ${campaignGoal}.`,
           channelsSentence,
-          baseText ? "\u0418\u0441\u043F\u043E\u043B\u044C\u0437\u0443\u0439 \u0443\u0442\u0432\u0435\u0440\u0436\u0434\u0451\u043D\u043D\u044B\u0435 \u043C\u0430\u0442\u0435\u0440\u0438\u0430\u043B\u044B: " + baseText : "\u0415\u0441\u043B\u0438 \u0443\u0442\u0432\u0435\u0440\u0436\u0434\u0451\u043D\u043D\u044B\u0445 \u0442\u0435\u043A\u0441\u0442\u043E\u0432 \u043D\u0435\u0442, \u043E\u043F\u0438\u0440\u0430\u0439\u0441\u044F \u043D\u0430 \u0441\u043E\u0431\u0441\u0442\u0432\u0435\u043D\u043D\u044B\u0439 \u0430\u043D\u0430\u043B\u0438\u0437.",
-          "\u0421\u0444\u043E\u0440\u043C\u0443\u043B\u0438\u0440\u0443\u0439 2\u20133 \u043A\u043B\u044E\u0447\u0435\u0432\u044B\u0435 \u043C\u0435\u0442\u0440\u0438\u043A\u0438 \u0443\u0441\u043F\u0435\u0445\u0430 (KQM), \u043A\u043E\u0442\u043E\u0440\u044B\u0435 \u043F\u043E\u043A\u0430\u0436\u0443\u0442, \u0447\u0442\u043E \u043A\u0430\u043C\u043F\u0430\u043D\u0438\u044F \u0434\u043E\u0441\u0442\u0438\u0433\u0430\u0435\u0442 \u0446\u0435\u043B\u0438.",
-          "\u041E\u043F\u0440\u0435\u0434\u0435\u043B\u0438 \u043E\u0441\u043D\u043E\u0432\u043D\u044B\u0435 \u043A\u0430\u043D\u0430\u043B\u044B \u043F\u0440\u043E\u0434\u0432\u0438\u0436\u0435\u043D\u0438\u044F, \u043E\u0431\u044A\u044F\u0441\u043D\u0438\u0432 \u0438\u0445 \u0440\u043E\u043B\u044C \u0438 \u043E\u0436\u0438\u0434\u0430\u0435\u043C\u044B\u0439 \u0432\u043A\u043B\u0430\u0434.",
-          "\u0414\u043E\u0431\u0430\u0432\u044C \u043A\u0440\u0430\u0442\u043A\u0438\u0435 \u0430\u043D\u0430\u043B\u0438\u0442\u0438\u0447\u0435\u0441\u043A\u0438\u0435 \u0438\u043D\u0441\u0430\u0439\u0442\u044B \u0438 \u0440\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u0430\u0446\u0438\u0438 \u043F\u043E \u043A\u043E\u043C\u043C\u0443\u043D\u0438\u043A\u0430\u0446\u0438\u044F\u043C.",
-          '\u041E\u0442\u0432\u0435\u0442 \u0432\u0435\u0440\u043D\u0438 \u0441\u0442\u0440\u043E\u0433\u043E \u0432 \u0444\u043E\u0440\u043C\u0430\u0442\u0435 JSON {"kqm": ["..."], "channels": ["..."], "insights": ["..."]} \u0431\u0435\u0437 \u043E\u0431\u044A\u044F\u0441\u043D\u0435\u043D\u0438\u0439 \u0438\u043B\u0438 \u0442\u0435\u043A\u0441\u0442\u0430 \u0432\u043D\u0435 JSON.',
-          "\u0423\u0447\u0442\u0438 \u0434\u043E\u043F\u043E\u043B\u043D\u0438\u0442\u0435\u043B\u044C\u043D\u044B\u0435 \u0442\u0440\u0435\u0431\u043E\u0432\u0430\u043D\u0438\u044F \u043A \u0444\u043E\u0440\u043C\u0430\u0442\u0443." + formatClause
+          effectiveBaseText ? `\u041A\u043B\u044E\u0447\u0435\u0432\u043E\u0439 \u0442\u0435\u043A\u0441\u0442: ${effectiveBaseText}` : "\u0422\u0435\u043A\u0441\u0442\u043E\u0432\u043E\u0435 \u043E\u043F\u0438\u0441\u0430\u043D\u0438\u0435 \u043E\u0442\u0441\u0443\u0442\u0441\u0442\u0432\u0443\u0435\u0442, \u043E\u043F\u0438\u0440\u0430\u0439\u0442\u0435\u0441\u044C \u043D\u0430 \u0442\u0435\u043C\u0443 \u0438 \u0444\u043E\u0440\u043C\u0430\u0442.",
+          "\u041E\u043F\u0440\u0435\u0434\u0435\u043B\u0438\u0442\u0435 \u043C\u0438\u043D\u0438\u043C\u0443\u043C \u0442\u0440\u0438 \u043A\u043B\u044E\u0447\u0435\u0432\u044B\u0435 \u043C\u0435\u0442\u0440\u0438\u043A\u0438 \u043A\u0430\u0447\u0435\u0441\u0442\u0432\u0430 \u043F\u0440\u043E\u0434\u0443\u043A\u0442\u0430 (KQM) \u0438 \u0442\u0440\u0438 \u043E\u0441\u043D\u043E\u0432\u043D\u044B\u0445 \u043A\u0430\u043D\u0430\u043B\u0430 \u043F\u0440\u043E\u0434\u0432\u0438\u0436\u0435\u043D\u0438\u044F.",
+          "\u0415\u0441\u043B\u0438 \u0438\u043D\u0444\u043E\u0440\u043C\u0430\u0446\u0438\u0438 \u043D\u0435\u0434\u043E\u0441\u0442\u0430\u0442\u043E\u0447\u043D\u043E, \u0434\u0435\u043B\u0430\u0439\u0442\u0435 \u0440\u0430\u0437\u0443\u043C\u043D\u044B\u0435 \u043F\u0440\u0435\u0434\u043F\u043E\u043B\u043E\u0436\u0435\u043D\u0438\u044F \u0438 \u043F\u043E\u043C\u0435\u0447\u0430\u0439\u0442\u0435 \u0438\u0445 \u043A\u0430\u043A \u0433\u0438\u043F\u043E\u0442\u0435\u0437\u044B.",
+          '\u041E\u0442\u0432\u0435\u0442 \u0432\u0435\u0440\u043D\u0438\u0442\u0435 \u0441\u0442\u0440\u043E\u0433\u043E \u0432 \u0444\u043E\u0440\u043C\u0430\u0442\u0435 JSON \u0441\u043E \u0441\u0442\u0440\u0443\u043A\u0442\u0443\u0440\u043E\u0439: {"kqm": ["..."], "channels": ["..."], "insights": ["..."]}.',
+          "\u041D\u0435 \u0434\u043E\u0431\u0430\u0432\u043B\u044F\u0439\u0442\u0435 \u043F\u043E\u044F\u0441\u043D\u0435\u043D\u0438\u0439 \u0432\u043D\u0435 JSON." + formatClause
         ].filter(Boolean).join(" ");
         try {
-          const { result: rawJson, tokens } = await ProviderManager.invoke(ANALYSIS_MODEL, prompt, "text");
+          const { result: rawJson, tokens, modelUsed, warning, isFallback } = await ProviderManager.invoke(
+            ANALYSIS_MODEL,
+            prompt,
+            "text"
+          );
           let parsed;
           try {
             parsed = JSON.parse(cleanJsonString2(rawJson));
-          } catch (error) {
-            throw new Error("LLM did not return valid JSON for product analysis.");
+          } catch (parseError) {
+            console.warn("[ProductAnalysisAgent] Received non-JSON response. Using fallback analysis.");
+            const fallback = attachMeta(
+              buildFallbackAnalysis({ topic, baseText: effectiveBaseText, distributionChannels }),
+              {
+                warning: parseError.message,
+                model: modelUsed || `${ANALYSIS_MODEL}-fallback`,
+                tokens: 0,
+                prompt,
+                upstreamFallback
+              }
+            );
+            logger.logStep(nodeId, "END", {
+              status: "SUCCESS",
+              metrics: fallback.kqm.length,
+              channels: fallback.channels.length,
+              fallback: true,
+              upstreamFallback: upstreamFallback || void 0
+            });
+            TaskStore.updateNodeStatus(nodeId, "SUCCESS", fallback, 0);
+            return fallback;
           }
-          const normalized = {
-            kqm: Array.isArray(parsed.kqm) ? parsed.kqm : [],
-            channels: Array.isArray(parsed.channels) ? parsed.channels : [],
-            insights: Array.isArray(parsed.insights) ? parsed.insights : []
-          };
+          const normalized = attachMeta(
+            {
+              kqm: Array.isArray(parsed.kqm) ? parsed.kqm : [],
+              channels: Array.isArray(parsed.channels) ? parsed.channels : [],
+              insights: Array.isArray(parsed.insights) ? parsed.insights : []
+            },
+            {
+              model: modelUsed || ANALYSIS_MODEL,
+              tokens,
+              prompt,
+              warning,
+              fallback: Boolean(isFallback),
+              upstreamFallback
+            }
+          );
           const cost = tokens * 5e-7;
           logger.logStep(nodeId, "END", {
             status: "SUCCESS",
             metrics: normalized.kqm.length,
             channels: normalized.channels.length,
-            cost
+            cost,
+            upstreamFallback: upstreamFallback || void 0
           });
-          const resultPayload = {
-            ...normalized,
-            meta: { model: ANALYSIS_MODEL, tokens, prompt }
-          };
-          TaskStore.updateNodeStatus(nodeId, "SUCCESS", resultPayload, cost);
-          return resultPayload;
+          TaskStore.updateNodeStatus(nodeId, "SUCCESS", normalized, cost);
+          return normalized;
         } catch (error) {
-          logger.logStep(nodeId, "ERROR", { message: error.message });
-          TaskStore.updateNodeStatus(nodeId, "FAILED", { error: error.message });
-          throw error;
+          console.warn("[ProductAnalysisAgent] Falling back after provider failure:", error.message);
+          const fallback = attachMeta(
+            buildFallbackAnalysis({ topic, baseText: effectiveBaseText, distributionChannels }),
+            {
+              warning: error.message,
+              model: `${ANALYSIS_MODEL}-fallback`,
+              tokens: 0,
+              prompt,
+              upstreamFallback
+            }
+          );
+          logger.logStep(nodeId, "END", {
+            status: "SUCCESS",
+            metrics: fallback.kqm.length,
+            channels: fallback.channels.length,
+            fallback: true,
+            upstreamFallback: upstreamFallback || void 0
+          });
+          TaskStore.updateNodeStatus(nodeId, "SUCCESS", fallback, 0);
+          return fallback;
         }
       }
     };
@@ -87321,6 +87512,43 @@ function normalizeSchedule(schedule) {
     generation_error: item?.generation_error || null
   }));
 }
+function attachMeta2(result, meta) {
+  if (!result.meta) {
+    result.meta = {};
+  }
+  Object.assign(result.meta, meta);
+  if (!result.meta.warning) {
+    delete result.meta.warning;
+  }
+  return result;
+}
+function buildFallbackStrategy({
+  topic,
+  campaignDuration,
+  campaignGoal,
+  distributionChannels,
+  analysisResult
+}) {
+  const defaultChannels = ["\u0412\u041A\u043E\u043D\u0442\u0430\u043A\u0442\u0435", "\u0422\u0435\u043B\u0435\u0433\u0440\u0430\u043C", "Email"];
+  const analysisChannels = Array.isArray(analysisResult?.channels) ? analysisResult.channels : [];
+  const insights = Array.isArray(analysisResult?.insights) ? analysisResult.insights : [];
+  const channels = distributionChannels && distributionChannels.length ? distributionChannels : analysisChannels.length ? analysisChannels : defaultChannels;
+  const selectedChannels = channels.slice(0, 3);
+  const today = /* @__PURE__ */ new Date();
+  const schedule = selectedChannels.map((channel, index) => ({
+    date: new Date(today.getTime() + index * 24 * 60 * 60 * 1e3).toISOString().split("T")[0],
+    type: index === 1 ? "visual" : index === 2 ? "story" : "post",
+    channel,
+    topic: `${topic}: \u043A\u043B\u044E\u0447\u0435\u0432\u044B\u0435 \u0430\u043A\u0442\u0438\u0432\u043D\u043E\u0441\u0442\u0438 \u0434\u043D\u044F ${index + 1}`,
+    objective: `\u041F\u043E\u0434\u0434\u0435\u0440\u0436\u0430\u0442\u044C \u0446\u0435\u043B\u044C \u043A\u0430\u043C\u043F\u0430\u043D\u0438\u0438: ${campaignGoal}.`,
+    notes: [
+      insights[index] ? `\u0418\u043D\u0441\u0430\u0439\u0442: ${insights[index]}` : null,
+      index === 0 ? `\u0421\u0442\u0430\u0440\u0442 \u043A\u0430\u043C\u043F\u0430\u043D\u0438\u0438 \u043D\u0430 \u043F\u0435\u0440\u0438\u043E\u0434 ${campaignDuration}.` : index === selectedChannels.length - 1 ? "\u041F\u043E\u0434\u0433\u043E\u0442\u043E\u0432\u0438\u0442\u044C \u0440\u0435\u043A\u0430\u043F \u0438 CTA \u043D\u0430 \u043F\u043E\u0432\u0442\u043E\u0440\u043D\u044B\u0435 \u043A\u0430\u0441\u0430\u043D\u0438\u044F." : "\u0423\u0441\u0438\u043B\u0438\u0442\u044C \u043E\u0445\u0432\u0430\u0442 \u0438 \u0432\u043E\u0432\u043B\u0435\u0447\u0451\u043D\u043D\u043E\u0441\u0442\u044C \u0447\u0435\u0440\u0435\u0437 \u0434\u043E\u043F\u043E\u043B\u043D\u0438\u0442\u0435\u043B\u044C\u043D\u044B\u0435 \u0444\u043E\u0440\u043C\u0430\u0442\u044B."
+    ].filter(Boolean).join(" ")
+  }));
+  const summary = `Fallback \u0441\u0442\u0440\u0430\u0442\u0435\u0433\u0438\u044F \u0434\u043B\u044F \u043A\u0430\u043C\u043F\u0430\u043D\u0438\u0438 "${topic}" \u043D\u0430 \u043F\u0435\u0440\u0438\u043E\u0434 ${campaignDuration}. \u0418\u0441\u043F\u043E\u043B\u044C\u0437\u0443\u0439\u0442\u0435 \u043A\u0430\u043D\u0430\u043B\u044B: ${selectedChannels.join(", ")}.`;
+  return { schedule, summary };
+}
 var STRATEGY_MODEL, StrategyAgent;
 var init_StrategyAgent = __esm({
   "src/agents/StrategyAgent.js"() {
@@ -87378,7 +87606,8 @@ var init_StrategyAgent = __esm({
           ];
           const strategyResult = {
             schedule,
-            summary: "Three-day staged launch touching email, paid social, and creators to reinforce KQM."
+            summary: "Three-day staged launch touching email, paid social, and creators to reinforce KQM.",
+            meta: { model: `${STRATEGY_MODEL}-mock`, tokens: 0, prompt: null }
           };
           TaskStore.updateTaskSchedule(node.taskId, schedule);
           logger.logStep(nodeId, "END", {
@@ -87406,7 +87635,11 @@ var init_StrategyAgent = __esm({
           formatClause
         ].filter(Boolean).join("\n");
         try {
-          const { result: rawJson, tokens } = await ProviderManager.invoke(STRATEGY_MODEL, prompt, "text");
+          const { result: rawJson, tokens, modelUsed, warning: providerWarning } = await ProviderManager.invoke(
+            STRATEGY_MODEL,
+            prompt,
+            "text"
+          );
           const cleaned = cleanJsonString3(rawJson);
           let parsed;
           try {
@@ -87419,18 +87652,71 @@ var init_StrategyAgent = __esm({
               try {
                 parsed = JSON.parse(candidate);
               } catch (secondaryError) {
-                throw new Error("LLM did not return valid JSON for strategy.");
+                console.warn("[StrategyAgent] Received non-JSON response. Using fallback strategy.");
+                const fallback = attachMeta2(
+                  buildFallbackStrategy({
+                    topic,
+                    campaignDuration,
+                    campaignGoal,
+                    distributionChannels,
+                    analysisResult
+                  }),
+                  {
+                    warning: `${secondaryError.message}${providerWarning ? ` | ${providerWarning}` : ""}`,
+                    model: modelUsed || `${STRATEGY_MODEL}-fallback`,
+                    tokens: 0,
+                    prompt
+                  }
+                );
+                TaskStore.updateTaskSchedule(node.taskId, fallback.schedule);
+                logger.logStep(nodeId, "END", {
+                  status: "SUCCESS",
+                  publications: fallback.schedule.length,
+                  fallback: true
+                });
+                TaskStore.updateNodeStatus(nodeId, "SUCCESS", fallback, 0);
+                return fallback;
               }
             } else {
-              throw new Error("LLM did not return valid JSON for strategy.");
+              console.warn("[StrategyAgent] Received non-JSON response. Using fallback strategy.");
+              const fallback = attachMeta2(
+                buildFallbackStrategy({
+                  topic,
+                  campaignDuration,
+                  campaignGoal,
+                  distributionChannels,
+                  analysisResult
+                }),
+                {
+                  warning: `${error.message}${providerWarning ? ` | ${providerWarning}` : ""}`,
+                  model: modelUsed || `${STRATEGY_MODEL}-fallback`,
+                  tokens: 0,
+                  prompt
+                }
+              );
+              TaskStore.updateTaskSchedule(node.taskId, fallback.schedule);
+              logger.logStep(nodeId, "END", {
+                status: "SUCCESS",
+                publications: fallback.schedule.length,
+                fallback: true
+              });
+              TaskStore.updateNodeStatus(nodeId, "SUCCESS", fallback, 0);
+              return fallback;
             }
           }
           const schedule = normalizeSchedule(parsed.schedule);
-          const strategyResult = {
-            schedule,
-            summary: parsed.summary || "",
-            meta: { model: STRATEGY_MODEL, tokens, prompt }
-          };
+          const strategyResult = attachMeta2(
+            {
+              schedule,
+              summary: parsed.summary || ""
+            },
+            {
+              model: modelUsed || STRATEGY_MODEL,
+              tokens,
+              prompt,
+              warning: providerWarning
+            }
+          );
           TaskStore.updateTaskSchedule(node.taskId, schedule);
           const cost = tokens * 5e-7;
           logger.logStep(nodeId, "END", {
@@ -87441,9 +87727,31 @@ var init_StrategyAgent = __esm({
           TaskStore.updateNodeStatus(nodeId, "SUCCESS", strategyResult, cost);
           return strategyResult;
         } catch (error) {
-          logger.logStep(nodeId, "ERROR", { message: error.message });
-          TaskStore.updateNodeStatus(nodeId, "FAILED", { error: error.message });
-          throw error;
+          logger.logStep(nodeId, "WARN", { message: error.message });
+          console.warn("[StrategyAgent] Falling back after provider failure:", error.message);
+          const fallback = attachMeta2(
+            buildFallbackStrategy({
+              topic,
+              campaignDuration,
+              campaignGoal,
+              distributionChannels,
+              analysisResult
+            }),
+            {
+              warning: error.message,
+              model: `${STRATEGY_MODEL}-fallback`,
+              tokens: 0,
+              prompt
+            }
+          );
+          TaskStore.updateTaskSchedule(node.taskId, fallback.schedule);
+          logger.logStep(nodeId, "END", {
+            status: "SUCCESS",
+            publications: fallback.schedule.length,
+            fallback: true
+          });
+          TaskStore.updateNodeStatus(nodeId, "SUCCESS", fallback, 0);
+          return fallback;
         }
       }
     };
@@ -87729,8 +88037,22 @@ var loadAgentModule = async (agentType) => {
 };
 var FINAL_NODE_STATUSES = /* @__PURE__ */ new Set(["SUCCESS", "FAILED", "MANUALLY_OVERRIDDEN", "SKIPPED_RETRY"]);
 async function processJob(job, onUpdate) {
+  if (!job) {
+    console.error("[MasterAgent] Attempted to process an empty job from the queue.");
+    return null;
+  }
   const { agentType, payload } = job;
-  const { nodeId } = payload;
+  const nodeId = payload?.nodeId;
+  if (!nodeId) {
+    console.error(`[MasterAgent] Job for agent ${agentType} is missing a nodeId.`);
+    return null;
+  }
+  const existingNode = TaskStore.getNode(nodeId);
+  if (!existingNode) {
+    console.error(`[MasterAgent] Node ${nodeId} not found for agent ${agentType}.`);
+    TaskStore.updateNodeStatus(nodeId, "FAILED", { error: "Node not found for job." });
+    return null;
+  }
   const node = TaskStore.updateNodeStatus(nodeId, "RUNNING");
   if (node && typeof onUpdate === "function") {
     onUpdate(node.taskId);
@@ -87746,7 +88068,8 @@ async function processJob(job, onUpdate) {
   try {
     await AgentModule.execute(nodeId, payload);
   } catch (error) {
-    console.error(`Worker error processing ${nodeId}:`, error.message);
+    console.error(`Worker error processing ${nodeId}:`, error);
+    TaskStore.updateNodeStatus(nodeId, "FAILED", { error: error.message || String(error) });
   }
   const updatedNode = TaskStore.getNode(nodeId);
   if (updatedNode && typeof onUpdate === "function") {
