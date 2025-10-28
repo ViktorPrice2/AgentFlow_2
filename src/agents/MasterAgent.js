@@ -120,6 +120,10 @@ export class MasterAgent {
       }
 
       const updatedTask = TaskStore.getTask(taskId);
+      if (!updatedTask) {
+        console.warn(`\n[Scheduler] Task ${taskId} no longer exists in TaskStore. Exiting scheduler loop.`);
+        break;
+      }
       if (updatedTask.status === 'COMPLETED' || updatedTask.status === 'FAILED') {
         completed = true;
         if (typeof onUpdate === 'function') {
@@ -155,7 +159,9 @@ export class MasterAgent {
       }
     }
 
-    console.log(`\n[Scheduler] Final Task Status: ${TaskStore.getTask(taskId).status}`);
+    const finalTask = TaskStore.getTask(taskId);
+    const finalStatus = finalTask?.status || 'UNKNOWN';
+    console.log(`\n[Scheduler] Final Task Status: ${finalStatus}`);
   }
 
   static async resumeTasks(onUpdate) {
