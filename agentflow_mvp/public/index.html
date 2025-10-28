@@ -397,6 +397,22 @@
             font-weight: 500;
         }
 
+        .delete-task-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 6px;
+            min-width: auto;
+            width: 34px;
+            height: 34px;
+        }
+
+        .delete-task-btn svg {
+            width: 16px;
+            height: 16px;
+            fill: currentColor;
+        }
+
         .status-pill {
             display: inline-flex;
             align-items: center;
@@ -1423,7 +1439,11 @@
                 li.innerHTML = `
                     <span class="status-pill ${statusClass}">${safeStatus}</span>
                     <a href="#" data-task-id="${safeTaskId}" title="${safeTitle}">${safeLabel}</a>
-                    <button type="button" class="secondary delete-task-btn" data-task-id="${safeTaskId}">Удалить</button>
+                    <button type="button" class="secondary delete-task-btn" data-task-id="${safeTaskId}" aria-label="Удалить задачу" title="Удалить задачу">
+                        <svg viewBox="0 0 20 20" role="img" focusable="false" aria-hidden="true">
+                            <path d="M7.5 2a1 1 0 0 0-.94.66L6.2 4H4a1 1 0 1 0 0 2h.27l.9 11.04A2 2 0 0 0 7.16 19h5.68a2 2 0 0 0 1.99-1.96L15.73 6H16a1 1 0 1 0 0-2h-2.2l-.36-1.34A1 1 0 0 0 12.5 2h-5Zm1.16 2h2.68l.18.66H8.48l.18-.66ZM8 8a1 1 0 0 1 2 0v6a1 1 0 1 1-2 0V8Zm4-1a1 1 0 0 1 1 1v6a1 1 0 1 1-2 0V8a1 1 0 0 1 1-1Z"/>
+                        </svg>
+                    </button>
                 `;
 
                 li.querySelector('a').addEventListener('click', event => {

@@ -41431,10 +41431,10 @@ function normalizeScheduleItem(item) {
     likes: toInteger(candidate.likes),
     content: typeof candidate.content === "string" ? candidate.content : "",
     content_prompt: candidate.content_prompt !== void 0 ? typeof candidate.content_prompt === "string" ? candidate.content_prompt : clone(candidate.content_prompt) : null,
-    image_prompt: candidate.image_prompt !== void 0 ? typeof candidate.image_prompt === "string" ? candidate.image_prompt : clone(candidate.image_prompt) : null,
     prompt_history: Array.isArray(candidate.prompt_history) ? candidate.prompt_history.map((entry) => entry === null || entry === void 0 ? "" : String(entry)) : [],
     manual_prompt: typeof candidate.manual_prompt === "string" ? candidate.manual_prompt : "",
     last_prompt: typeof candidate.last_prompt === "string" ? candidate.last_prompt : "",
+    image_prompt: candidate.image_prompt !== void 0 ? typeof candidate.image_prompt === "string" ? candidate.image_prompt : clone(candidate.image_prompt) : null,
     status: candidate.status || "PLANNED_CONTENT",
     last_generated_at: candidate.last_generated_at || null,
     last_generated_id: candidate.last_generated_id || null,
@@ -87940,6 +87940,10 @@ var determineAgentTypeForScheduleItem = (scheduleItem) => {
   return "WriterAgent";
 };
 var composeSchedulePrompt = (scheduleItem, task) => {
+  const manualPrompt = typeof scheduleItem?.manual_prompt === "string" ? scheduleItem.manual_prompt.trim() : "";
+  if (manualPrompt) {
+    return manualPrompt;
+  }
   const typeLabel = scheduleItem?.type || "\u043A\u043E\u043D\u0442\u0435\u043D\u0442";
   const channel = scheduleItem?.channel || "\u043E\u0441\u043D\u043E\u0432\u043D\u043E\u0433\u043E \u043A\u0430\u043D\u0430\u043B\u0430";
   const promptParts = [
@@ -88197,7 +88201,7 @@ app.post("/api/tasks/:taskId/schedule/generate/:index", async (req, res) => {
     scheduleContext
   };
   if (agentType === "ImageAgent") {
-    inputData.description = promptText;
+    inputData.description = promptForExecution;
   }
   if (agentType === "VideoAgent") {
     inputData.scheduleContext = {
