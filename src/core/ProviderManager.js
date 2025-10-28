@@ -249,7 +249,13 @@ export class ProviderManager {
       } catch (error) {
         console.warn(`[ProviderManager] Falling back to safe stub after Gemini failure: ${error.message}`);
         const fallbackText = `Автоматическая генерация недоступна: ${error.message}. Подготовьте текст вручную или повторите позже.`;
-        return { result: fallbackText, tokens: 0, modelUsed: `${model}-fallback`, warning: error.message };
+        return {
+          result: fallbackText,
+          tokens: 0,
+          modelUsed: `${model}-fallback`,
+          warning: error.message,
+          isFallback: true,
+        };
       }
     }
 

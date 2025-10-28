@@ -256,6 +256,7 @@ export class ProviderManager {
           tokens: 0,
           modelUsed: `${model}-fallback`,
           warning: error.message,
+          isFallback: true,
         };
       }
     }
