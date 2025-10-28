@@ -80,6 +80,61 @@ function normalizeSchedule(schedule) {
   }));
 }
 
+function attachMeta(result, meta) {
+  if (!result.meta) {
+    result.meta = {};
+  }
+
+  Object.assign(result.meta, meta);
+
+  if (!result.meta.warning) {
+    delete result.meta.warning;
+  }
+
+  return result;
+}
+
+function buildFallbackStrategy({
+  topic,
+  campaignDuration,
+  campaignGoal,
+  distributionChannels,
+  analysisResult,
+}) {
+  const defaultChannels = ['ВКонтакте', 'Телеграм', 'Email'];
+  const analysisChannels = Array.isArray(analysisResult?.channels) ? analysisResult.channels : [];
+  const insights = Array.isArray(analysisResult?.insights) ? analysisResult.insights : [];
+
+  const channels = (distributionChannels && distributionChannels.length)
+    ? distributionChannels
+    : (analysisChannels.length ? analysisChannels : defaultChannels);
+
+  const selectedChannels = channels.slice(0, 3);
+  const today = new Date();
+
+  const schedule = selectedChannels.map((channel, index) => ({
+    date: new Date(today.getTime() + index * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    type: index === 1 ? 'visual' : index === 2 ? 'story' : 'post',
+    channel,
+    topic: `${topic}: ключевые активности дня ${index + 1}`,
+    objective: `Поддержать цель кампании: ${campaignGoal}.`,
+    notes: [
+      insights[index] ? `Инсайт: ${insights[index]}` : null,
+      index === 0
+        ? `Старт кампании на период ${campaignDuration}.`
+        : index === selectedChannels.length - 1
+          ? 'Подготовить рекап и CTA на повторные касания.'
+          : 'Усилить охват и вовлечённость через дополнительные форматы.',
+    ]
+      .filter(Boolean)
+      .join(' '),
+  }));
+
+  const summary = `Fallback стратегия для кампании "${topic}" на период ${campaignDuration}. Используйте каналы: ${selectedChannels.join(', ')}.`;
+
+  return { schedule, summary };
+}
+
 export class StrategyAgent {
   static async execute(nodeId) {
     const node = TaskStore.getNode(nodeId);
@@ -144,6 +199,7 @@ export class StrategyAgent {
       const strategyResult = {
         schedule,
         summary: 'Three-day staged launch touching email, paid social, and creators to reinforce KQM.',
+        meta: { model: `${STRATEGY_MODEL}-mock`, tokens: 0, prompt: null },
       };
 
       TaskStore.updateTaskSchedule(node.taskId, schedule);
@@ -179,7 +235,11 @@ export class StrategyAgent {
 
 
     try {
-      const { result: rawJson, tokens } = await ProviderManager.invoke(STRATEGY_MODEL, prompt, 'text');
+      const { result: rawJson, tokens, modelUsed, warning: providerWarning } = await ProviderManager.invoke(
+        STRATEGY_MODEL,
+        prompt,
+        'text'
+      );
 
       const cleaned = cleanJsonString(rawJson);
       let parsed;
@@ -193,19 +253,78 @@ export class StrategyAgent {
           try {
             parsed = JSON.parse(candidate);
           } catch (secondaryError) {
-            throw new Error('LLM did not return valid JSON for strategy.');
+            console.warn('[StrategyAgent] Received non-JSON response. Using fallback strategy.');
+            const fallback = attachMeta(
+              buildFallbackStrategy({
+                topic,
+                campaignDuration,
+                campaignGoal,
+                distributionChannels,
+                analysisResult,
+              }),
+              {
+                warning: `${secondaryError.message}${providerWarning ? ` | ${providerWarning}` : ''}`,
+                model: modelUsed || `${STRATEGY_MODEL}-fallback`,
+                tokens: 0,
+                prompt,
+              }
+            );
+
+            TaskStore.updateTaskSchedule(node.taskId, fallback.schedule);
+
+            logger.logStep(nodeId, 'END', {
+              status: 'SUCCESS',
+              publications: fallback.schedule.length,
+              fallback: true,
+            });
+
+            TaskStore.updateNodeStatus(nodeId, 'SUCCESS', fallback, 0);
+            return fallback;
           }
         } else {
-          throw new Error('LLM did not return valid JSON for strategy.');
+          console.warn('[StrategyAgent] Received non-JSON response. Using fallback strategy.');
+          const fallback = attachMeta(
+            buildFallbackStrategy({
+              topic,
+              campaignDuration,
+              campaignGoal,
+              distributionChannels,
+              analysisResult,
+            }),
+            {
+              warning: `${error.message}${providerWarning ? ` | ${providerWarning}` : ''}`,
+              model: modelUsed || `${STRATEGY_MODEL}-fallback`,
+              tokens: 0,
+              prompt,
+            }
+          );
+
+          TaskStore.updateTaskSchedule(node.taskId, fallback.schedule);
+
+          logger.logStep(nodeId, 'END', {
+            status: 'SUCCESS',
+            publications: fallback.schedule.length,
+            fallback: true,
+          });
+
+          TaskStore.updateNodeStatus(nodeId, 'SUCCESS', fallback, 0);
+          return fallback;
         }
       }
 
       const schedule = normalizeSchedule(parsed.schedule);
-      const strategyResult = {
-        schedule,
-        summary: parsed.summary || '',
-        meta: { model: STRATEGY_MODEL, tokens, prompt },
-      };
+      const strategyResult = attachMeta(
+        {
+          schedule,
+          summary: parsed.summary || '',
+        },
+        {
+          model: modelUsed || STRATEGY_MODEL,
+          tokens,
+          prompt,
+          warning: providerWarning,
+        }
+      );
 
       TaskStore.updateTaskSchedule(node.taskId, schedule);
 
@@ -219,9 +338,34 @@ export class StrategyAgent {
       TaskStore.updateNodeStatus(nodeId, 'SUCCESS', strategyResult, cost);
       return strategyResult;
     } catch (error) {
-      logger.logStep(nodeId, 'ERROR', { message: error.message });
-      TaskStore.updateNodeStatus(nodeId, 'FAILED', { error: error.message });
-      throw error;
+      logger.logStep(nodeId, 'WARN', { message: error.message });
+      console.warn('[StrategyAgent] Falling back after provider failure:', error.message);
+      const fallback = attachMeta(
+        buildFallbackStrategy({
+          topic,
+          campaignDuration,
+          campaignGoal,
+          distributionChannels,
+          analysisResult,
+        }),
+        {
+          warning: error.message,
+          model: `${STRATEGY_MODEL}-fallback`,
+          tokens: 0,
+          prompt,
+        }
+      );
+
+      TaskStore.updateTaskSchedule(node.taskId, fallback.schedule);
+
+      logger.logStep(nodeId, 'END', {
+        status: 'SUCCESS',
+        publications: fallback.schedule.length,
+        fallback: true,
+      });
+
+      TaskStore.updateNodeStatus(nodeId, 'SUCCESS', fallback, 0);
+      return fallback;
     }
   }
 }
