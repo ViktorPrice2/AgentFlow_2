@@ -11,12 +11,12 @@ const originalGetGeminiApiKey = ProxyManager.getGeminiApiKey;
 test('ProviderManager uses sanitized prompt when Gemini blocks content', async t => {
   ProxyManager.getGeminiApiKey = () => 'test-key';
 
-  const prompts = [];
+  const calls = [];
   __testHooks.setRequestHandler(async (_url, payload) => {
     const prompt = payload?.contents?.[0]?.parts?.[0]?.text || '';
-    prompts.push(prompt);
+    calls.push({ prompt, payload });
 
-    if (prompts.length === 1) {
+    if (calls.length === 1) {
       return {
         data: {
           candidates: [
@@ -30,7 +30,7 @@ test('ProviderManager uses sanitized prompt when Gemini blocks content', async t
       };
     }
 
-    if (prompts.length === 2) {
+    if (calls.length === 2) {
       return {
         data: {
           candidates: [
@@ -73,7 +73,20 @@ test('ProviderManager uses sanitized prompt when Gemini blocks content', async t
   assert.ok(!result.warning);
   assert.ok(!result.isFallback);
 
-  assert.equal(prompts.length, 3);
-  assert.ok(prompts[1].includes('Пожалуйста, сформулируй безопасный'));
-  assert.ok(prompts[2].includes('Сформулируй нейтральный и безопасный текст'));
+  assert.equal(calls.length, 3);
+
+  const [firstCall, secondCall, thirdCall] = calls;
+
+  assert.deepEqual(firstCall.payload.safetySettings, [
+    { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+    { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_ONLY_HIGH' },
+    { category: 'HARM_CATEGORY_SEXUAL', threshold: 'BLOCK_ONLY_HIGH' },
+    { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_ONLY_HIGH' },
+  ]);
+
+  assert.ok(secondCall.prompt.includes('Пожалуйста, сформулируй безопасный'));
+  assert.ok(thirdCall.prompt.includes('Сформулируй нейтральный и безопасный текст'));
+  assert.ok(
+    thirdCall.prompt.includes('Напиши статью в энтузиастичном тоне на тему «покорение Марса».')
+  );
 });
