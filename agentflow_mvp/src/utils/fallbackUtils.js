@@ -3,6 +3,13 @@ const FALLBACK_PREFIXES = [
   'automatic generation unavailable',
 ];
 
+const FALLBACK_KEYWORDS = [
+  'возникли сложности с автоматической генерацией',
+  'готов помочь вам сформулировать текст',
+  'ручная подготовка контента',
+  'manual content preparation',
+];
+
 export const isFallbackStubText = text => {
   if (typeof text !== 'string') {
     return false;
@@ -13,7 +20,11 @@ export const isFallbackStubText = text => {
     return false;
   }
 
-  return FALLBACK_PREFIXES.some(prefix => normalized.startsWith(prefix));
+  if (FALLBACK_PREFIXES.some(prefix => normalized.startsWith(prefix))) {
+    return true;
+  }
+
+  return FALLBACK_KEYWORDS.some(fragment => normalized.includes(fragment));
 };
 
 export const normalizeFallbackModel = (model, isFallback) => {

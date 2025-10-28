@@ -3,6 +3,7 @@ import { ProviderManager } from '../core/ProviderManager.js';
 import { Logger } from '../core/Logger.js';
 import { TaskStore } from '../core/db/TaskStore.js';
 import { buildRussianArticlePrompt } from '../utils/promptUtils.js';
+import { isFallbackStubText } from '../utils/fallbackUtils.js';
 
 function clone(value) {
   return value ? JSON.parse(JSON.stringify(value)) : {};
@@ -68,10 +69,29 @@ export class RetryAgent {
 
     try {
       const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-      const { result: newPromptText } = await ProviderManager.invoke(model, correctionPrompt, 'text');
+      const { result: newPromptText, warning, isFallback } = await ProviderManager.invoke(
+        model,
+        correctionPrompt,
+        'text'
+      );
+
+      const trimmedPrompt = (newPromptText || '').trim();
+      const fallbackPrompt =
+        !trimmedPrompt ||
+        Boolean(isFallback) ||
+        isFallbackStubText(trimmedPrompt) ||
+        isFallbackStubText(warning);
+
+      if (fallbackPrompt) {
+        const reasonMessage =
+          'LLM_FALLBACK: Корректор не смог получить новый промпт — требуется ручной ввод.';
+        logger.logStep(nodeId, 'END', { status: 'FAILED', reason: reasonMessage });
+        TaskStore.updateNodeStatus(nodeId, 'FAILED', { reason: reasonMessage });
+        return;
+      }
 
       const updatedInput = clone(originalInput);
-      updatedInput.promptOverride = newPromptText.trim(); 
+      updatedInput.promptOverride = trimmedPrompt;
       updatedInput.retryCount = (originalInput.retryCount || 0) + 1;
 
       const correctiveNode = TaskStore.createCorrectiveNode(dependencyId, updatedInput);

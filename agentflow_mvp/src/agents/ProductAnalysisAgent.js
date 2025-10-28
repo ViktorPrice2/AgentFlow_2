@@ -126,7 +126,11 @@ export class ProductAnalysisAgent {
     const rawBaseText = upstreamResult?.approvedContent || upstreamResult?.text || '';
     const baseText = typeof rawBaseText === 'string' ? rawBaseText : '';
     const upstreamMeta = upstreamResult?.meta || {};
-    const upstreamFallback = Boolean(upstreamMeta.fallback) || isFallbackStubText(baseText);
+    const upstreamFallback =
+      Boolean(upstreamMeta.fallback) ||
+      isFallbackStubText(baseText) ||
+      isFallbackStubText(upstreamMeta?.warning) ||
+      isFallbackStubText(upstreamMeta?.prompt);
     const effectiveBaseText = upstreamFallback ? '' : baseText;
     const topic = node.input_data?.topic || 'Продукт';
     const formatClause = formatInstructionsToText(node.input_data?.format);

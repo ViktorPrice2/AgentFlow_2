@@ -258,8 +258,13 @@ export class GuardAgent {
       const upstreamMeta = prevResult?.meta;
       const metaFallback = upstreamMeta?.fallback || /-fallback$/i.test(upstreamMeta?.model || '');
       const textFallback = isFallbackStubText(upstreamText);
-      if (metaFallback || textFallback) {
-        const warningMessage = upstreamMeta?.warning || (textFallback ? upstreamText : null);
+      const warningFallback = isFallbackStubText(upstreamMeta?.warning);
+      const promptFallback = isFallbackStubText(upstreamMeta?.prompt);
+      if (metaFallback || textFallback || warningFallback || promptFallback) {
+        const warningMessage =
+          (typeof upstreamMeta?.warning === 'string' && upstreamMeta.warning.trim()) ||
+          (textFallback ? upstreamText : '') ||
+          (promptFallback ? upstreamMeta?.prompt : '');
         failureReason = warningMessage
           ? `LLM_FALLBACK: ${warningMessage}`
           : 'LLM_FALLBACK: Автоматическая генерация не вернула готовый контент.';

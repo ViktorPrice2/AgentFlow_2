@@ -29,7 +29,10 @@ export class WriterAgent {
         'text'
       );
 
-      const fallbackDetected = Boolean(isFallback) || isFallbackStubText(text);
+      const fallbackDetected =
+        Boolean(isFallback) ||
+        isFallbackStubText(text) ||
+        isFallbackStubText(warning);
       const normalizedModel = normalizeFallbackModel(modelUsed || DEFAULT_MODEL, fallbackDetected);
       const normalizedWarning = ensureFallbackWarning(warning, fallbackDetected);
 
