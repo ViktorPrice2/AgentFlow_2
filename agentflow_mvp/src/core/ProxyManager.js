@@ -5,9 +5,10 @@ import { HttpsProxyAgent } from 'https-proxy-agent';
 import '../utils/loadEnv.js';
 import { resolveDataPath } from '../utils/appPaths.js';
 
-const CONFIG_PATH = resolveDataPath('agentflow_settings.json');
+const PRIMARY_CONFIG_PATH = resolveDataPath('settings.json');
+const LEGACY_CONFIG_PATH = resolveDataPath('agentflow_settings.json');
 
-const DEFAULT_PROXY_CONFIG = {
+const LEGACY_DEFAULT_PROXY = {
   host: '181.215.71.182',
   httpPort: 7239,
   socksPort: 17239,
@@ -17,8 +18,8 @@ const DEFAULT_PROXY_CONFIG = {
 
 let settings = loadSettings();
 
-function ensureDataDir() {
-  const dir = path.dirname(CONFIG_PATH);
+function ensureDataDir(targetPath) {
+  const dir = path.dirname(targetPath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
@@ -26,15 +27,23 @@ function ensureDataDir() {
 
 function loadSettings() {
   try {
-    ensureDataDir();
-    if (fs.existsSync(CONFIG_PATH)) {
-      const parsed = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
+    const configPath = pickConfigPath();
+    ensureDataDir(configPath);
+    if (fs.existsSync(configPath)) {
+      const parsed = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
       return normalizeSettings(parsed);
     }
   } catch (error) {
     console.warn('[ProxyManager] Failed to read settings:', error.message);
   }
   return normalizeSettings({});
+}
+
+function pickConfigPath() {
+  if (fs.existsSync(PRIMARY_CONFIG_PATH)) {
+    return PRIMARY_CONFIG_PATH;
+  }
+  return LEGACY_CONFIG_PATH;
 }
 
 function normalizeSettings(raw) {
@@ -55,21 +64,7 @@ function normalizeSettings(raw) {
     password: typeof proxyPayload.password === 'string' ? proxyPayload.password.trim() : '',
   };
 
-  // если не было пользовательского ввода, подставим дефолт для первого запуска
-  const hasUserConfig = Boolean(
-    raw.proxy ||
-      proxyPayload.host ||
-      proxyPayload.httpPort ||
-      proxyPayload.socksPort ||
-      proxyPayload.login ||
-      proxyPayload.password
-  );
-
-  const proxyConfig = hasUserConfig
-    ? proxy
-    : {
-        ...DEFAULT_PROXY_CONFIG,
-      };
+  const proxyConfig = sanitizeProxyConfig(proxy);
 
   const geminiApiKey =
     typeof raw.geminiApiKey === 'string' && raw.geminiApiKey.trim()
@@ -86,12 +81,20 @@ function normalizeSettings(raw) {
 
 function saveSettings() {
   try {
-    ensureDataDir();
+    const targetPath = PRIMARY_CONFIG_PATH;
+    ensureDataDir(targetPath);
     fs.writeFileSync(
-      CONFIG_PATH,
+      targetPath,
       JSON.stringify({ proxy: settings.proxy, geminiApiKey: settings.geminiApiKey }, null, 2),
       'utf-8'
     );
+    if (LEGACY_CONFIG_PATH !== targetPath && fs.existsSync(LEGACY_CONFIG_PATH)) {
+      try {
+        fs.unlinkSync(LEGACY_CONFIG_PATH);
+      } catch (unlinkError) {
+        console.warn('[ProxyManager] Failed to remove legacy settings file:', unlinkError.message);
+      }
+    }
   } catch (error) {
     console.warn('[ProxyManager] Failed to persist settings:', error.message);
   }
@@ -106,6 +109,36 @@ function buildAuthString(config) {
     return `${config.login}@`;
   }
   return '';
+}
+
+function isLegacyDefaultProxy(config) {
+  if (!config) return false;
+  const sameHost = config.host === LEGACY_DEFAULT_PROXY.host;
+  const sameHttp = (config.httpPort || null) === LEGACY_DEFAULT_PROXY.httpPort;
+  const sameSocks = (config.socksPort || null) === LEGACY_DEFAULT_PROXY.socksPort;
+  const sameLogin = config.login === LEGACY_DEFAULT_PROXY.login;
+  const samePassword = config.password === LEGACY_DEFAULT_PROXY.password;
+  return sameHost && sameHttp && sameSocks && sameLogin && samePassword;
+}
+
+function sanitizeProxyConfig(config) {
+  const baseConfig = {
+    host: config.host || '',
+    httpPort: Number.isFinite(config.httpPort) ? config.httpPort : null,
+    socksPort: Number.isFinite(config.socksPort) ? config.socksPort : null,
+    login: config.login || '',
+    password: config.password || '',
+  };
+
+  if (!baseConfig.host) {
+    return { ...baseConfig, httpPort: null, socksPort: null, login: '', password: '' };
+  }
+
+  if (isLegacyDefaultProxy(baseConfig)) {
+    return { host: '', httpPort: null, socksPort: null, login: '', password: '' };
+  }
+
+  return baseConfig;
 }
 
 function applyEnvironmentVariables(config) {
@@ -180,7 +213,7 @@ export const ProxyManager = {
       password: typeof merged.password === 'string' ? merged.password.trim() : '',
     };
 
-    settings.proxy = normalized;
+    settings.proxy = sanitizeProxyConfig(normalized);
     applyEnvironmentVariables(settings.proxy);
     saveSettings();
     return getProxyClientConfig();
@@ -204,15 +237,15 @@ export const ProxyManager = {
       return {};
     }
 
-  if (config.httpPort) {
-    const auth = buildAuthString(config);
-    const proxyUrl = `http://${auth}${config.host}:${config.httpPort}`;
-    const httpsAgent = new HttpsProxyAgent(proxyUrl);
-    return {
-      proxy: false,
-      httpsAgent,
-    };
-  }
+    if (config.httpPort) {
+      const auth = buildAuthString(config);
+      const proxyUrl = `http://${auth}${config.host}:${config.httpPort}`;
+      const httpsAgent = new HttpsProxyAgent(proxyUrl);
+      return {
+        proxy: false,
+        httpsAgent,
+      };
+    }
 
     if (config.socksPort) {
       const auth = buildAuthString(config);

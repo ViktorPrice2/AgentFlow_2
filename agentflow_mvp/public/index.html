@@ -942,29 +942,29 @@
         <section class="card settings-card">
             <div>
                 <h2>Настройки прокси</h2>
-                <p class="page-subtitle">Эти данные используются агентами для выхода в интернет. По умолчанию подставлены параметры: <code>user332599:hnakbz@181.215.71.182:7239</code>.</p>
+                <p class="page-subtitle">Эти поля заполняются только при работе через корпоративный или сторонний прокси. По умолчанию соединения выполняются напрямую без каких-либо предустановленных адресов.</p>
             </div>
             <form id="proxyForm" class="proxy-form">
                 <div class="proxy-form-grid">
                     <label class="input-group">
                         Адрес прокси
-                        <input type="text" id="proxyHost">
+                        <input type="text" id="proxyHost" placeholder="proxy.example.com">
                     </label>
                     <label class="input-group">
                         Порт HTTP(S)
-                        <input type="number" id="proxyHttpPort" min="1" placeholder="7239">
+                        <input type="number" id="proxyHttpPort" min="1" placeholder="8080">
                     </label>
                     <label class="input-group">
                         Порт SOCKS5
-                        <input type="number" id="proxySocksPort" min="1" placeholder="17239">
+                        <input type="number" id="proxySocksPort" min="1" placeholder="1080">
                     </label>
                     <label class="input-group">
                         Логин
-                        <input type="text" id="proxyLogin" placeholder="user332599">
+                        <input type="text" id="proxyLogin" placeholder="Логин (если требуется)">
                     </label>
                     <label class="input-group">
                         Пароль
-                        <input type="text" id="proxyPassword" placeholder="hnakbz">
+                        <input type="text" id="proxyPassword" placeholder="Пароль (если требуется)">
                     </label>
                     <label class="input-group">
                         login:password@ip:port (HTTP)

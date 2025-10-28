@@ -1,10 +1,10 @@
 {
   "proxy": {
-    "host": "181.215.71.182",
-    "httpPort": 7239,
-    "socksPort": 17239,
-    "login": "user332599",
-    "password": "hnakbz"
+    "host": "",
+    "httpPort": null,
+    "socksPort": null,
+    "login": "",
+    "password": ""
   },
-  "geminiApiKey": "AIzaSyB1aW9PCzmHECZAqOP7jwkF29UuzknevCk"
+  "geminiApiKey": ""
 }
