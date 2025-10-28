@@ -989,10 +989,6 @@
                     Дополнительные инструкции
                     <textarea id="formatNotes" class="format-notes" placeholder="Стиль, ключевые сообщения, ограничения..."></textarea>
                 </label>
-                <label class="input-group">
-                    Предпросмотр промпта
-                    <textarea id="taskPromptPreview" class="format-notes" readonly placeholder="Промпт появится после генерации расписания."></textarea>
-                </label>
             </div>
             <button id="startTaskBtn">🚀 Запустить AgentFlow</button>
         </section>
@@ -1799,12 +1795,6 @@
                 delete resultData.schedule;
             }
 
-            if (resultData?.meta) {
-                resultData.meta = { ...resultData.meta };
-                delete resultData.meta.prompt;
-                delete resultData.meta.promptOverride;
-            }
-
             if (resultData) {
                 html += buildNodeDataSection('Полный результат', resultData);
             }
@@ -1970,7 +1960,7 @@
                 const isGenerating = ['CONTENT_GENERATING', 'GENERATING', 'IN_PROGRESS'].includes((item.status || '').toUpperCase());
                 const generatorDisabledAttr = generatorEnabled && !isGenerating ? '' : 'disabled';
                 const manualPromptField = `<textarea class="inline-textarea small" data-index="${index}" data-field="manual_prompt" onchange="updateScheduleStat(this, '${taskId}')">${safeManualPrompt}</textarea>`;
-                const generatorButton = `<button class="secondary" data-action="generate-content" data-index="${index}" ${generatorDisabledAttr}>Regenerate</button>`;
+                const generatorButton = `<button class="secondary" data-action="generate-content" data-index="${index}" ${generatorDisabledAttr}>Переписать</button>`;
 
                 const contentBlock = contentData.hasContent
                     ? buildContentText(contentFull)
