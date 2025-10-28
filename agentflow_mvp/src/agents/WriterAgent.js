@@ -22,16 +22,25 @@ export class WriterAgent {
       : buildRussianArticlePrompt(node.input_data?.topic, node.input_data?.tone);
 
     try {
-      const { result: text, tokens } = await ProviderManager.invoke(DEFAULT_MODEL, basePrompt, 'text');
+      const { result: text, tokens, modelUsed, warning } = await ProviderManager.invoke(
+        DEFAULT_MODEL,
+        basePrompt,
+        'text'
+      );
 
       const resultData = {
         text,
         meta: {
-          model: DEFAULT_MODEL,
+          model: modelUsed || DEFAULT_MODEL,
           tokens,
           prompt: basePrompt,
+          warning,
         },
       };
+
+      if (!resultData.meta.warning) {
+        delete resultData.meta.warning;
+      }
 
       const costPerToken = 0.0000005;
       const cost = tokens * costPerToken;
