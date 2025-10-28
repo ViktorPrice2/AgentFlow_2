@@ -194,13 +194,14 @@ export class ProductAnalysisAgent {
         console.warn('[ProductAnalysisAgent] Received non-JSON response. Using fallback analysis.');
         const fallback = attachMeta(
           buildFallbackAnalysis({ topic, baseText: effectiveBaseText, distributionChannels }),
-          warning: parseError.message,
-          model: modelUsed || `${ANALYSIS_MODEL}-fallback`,
-          tokens: 0,
-          prompt,
-          upstreamFallback,
-        });
-
+          {
+            warning: parseError.message,
+            model: modelUsed || `${ANALYSIS_MODEL}-fallback`,
+            tokens: 0,
+            prompt,
+            upstreamFallback,
+          }
+        );
         logger.logStep(nodeId, 'END', {
           status: 'SUCCESS',
           metrics: fallback.kqm.length,
