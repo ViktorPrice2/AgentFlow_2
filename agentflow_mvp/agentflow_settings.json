@@ -2,7 +2,7 @@
   "proxy": {
     "host": "181.215.71.182",
     "httpPort": 7239,
-    "socksPort": null,
+    "socksPort": 17239,
     "login": "user332599",
     "password": "hnakbz"
   },

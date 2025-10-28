@@ -86340,7 +86340,7 @@ Error Status: ${error.response.status}`
               generationConfig: {
                 temperature: 0.6,
                 topP: 0.95,
-                maxOutputTokens: 1024
+                maxOutputTokens: 8192
               }
             };
             try {
