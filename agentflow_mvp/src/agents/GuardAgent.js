@@ -4,6 +4,7 @@
 import '../utils/loadEnv.js';
 import { Logger } from '../core/Logger.js';
 import { TaskStore } from '../core/db/TaskStore.js';
+import { isFallbackStubText } from '../utils/fallbackUtils.js';
 
 let forcedFailureConsumed = false;
 
@@ -239,7 +240,8 @@ export class GuardAgent {
 
     const prevNodeId = node.dependsOn[0];
     const prevResult = prevNodeId ? TaskStore.getResult(prevNodeId) : null;
-    const contentToValidate = prevResult?.text || prevResult?.imagePath || 'No Content';
+    const upstreamText = typeof prevResult?.text === 'string' ? prevResult.text : '';
+    const contentToValidate = upstreamText || prevResult?.imagePath || 'No Content';
     const dependencyNode = prevNodeId ? TaskStore.getNode(prevNodeId) : null;
 
     try {
@@ -254,12 +256,22 @@ export class GuardAgent {
 
       let failureReason = null;
 
-      if (node.input_data.check === 'tone') {
+      const upstreamMeta = prevResult?.meta;
+      const metaFallback = upstreamMeta?.fallback || /-fallback$/i.test(upstreamMeta?.model || '');
+      const textFallback = isFallbackStubText(upstreamText);
+      if (metaFallback || textFallback) {
+        const warningMessage = upstreamMeta?.warning || (textFallback ? upstreamText : null);
+        failureReason = warningMessage
+          ? `LLM_FALLBACK: ${warningMessage}`
+          : 'LLM_FALLBACK: Автоматическая генерация не вернула готовый контент.';
+      }
+
+      if (!failureReason && node.input_data.check === 'tone') {
         const expectedTone = dependencyNode?.input_data?.tone;
         failureReason = detectToneIssue(contentToValidate, expectedTone);
       }
 
-      if (node.input_data.check === 'image_quality' && !prevResult?.imagePath) {
+      if (!failureReason && node.input_data.check === 'image_quality' && !prevResult?.imagePath) {
         failureReason = 'IMAGE_VALIDATION_FAILED: изображение отсутствует или не было создано.';
       }
 
