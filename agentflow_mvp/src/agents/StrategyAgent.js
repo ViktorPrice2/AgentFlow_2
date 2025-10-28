@@ -159,31 +159,45 @@ export class StrategyAgent {
     }
 
     const prompt = [
-      'Вы — стратег по маркетингу. На основе аналитики подготовь детальный план коммуникаций на весь период кампании.',
-      'Тема кампании: ' + topic + '.',
-      'Длительность кампании: ' + campaignDuration + '.',
-      'Цель кампании: ' + campaignGoal + '.',
+      'Ты — стратег по маркетингу. Используй результаты анализа, чтобы подготовить подробный медиаплан на весь период кампании.',
+      `Тема кампании: ${topic}.`,
+      `Длительность кампании: ${campaignDuration}.`,
+      `Цель кампании: ${campaignGoal}.`,
       distributionSentence,
-      'Ключевые метрики (KQM) из аналитики: ' + kqm + '.',
-      'Рекомендованные каналы из аналитики: ' + channels + '.',
-      (insights ? 'Главные инсайты: ' + insights + '.' : ''),
-      'Сформируй расписание активностей на весь период. Для каждой даты укажи формат, площадку, тему сообщения, цель и заметки/CTA.',
-      'Покажи, как план поддерживает заявленную цель и выбранные площадки, учитывай логистику и зависимость шагов.',
-      'Ответ верни строго в JSON {"schedule": [{"date": "YYYY-MM-DD", "type": "post/article/visual", "channel": "...", "topic": "...", "objective": "...", "notes": "..."}], "summary": "..."} без дополнительного текста.',
-      'Учти дополнительные требования к формату.' + formatClause,
+      `Ключевые метрики успеха (KQM): ${kqm}.`,
+      `Рекомендованные каналы: ${channels}.`,
+      (insights ? `Дополнительные инсайты: ${insights}.` : ''),
+      'Сформируй расписание активностей (не более 6 записей), равномерно охватывая выбранные площадки. Каждый элемент обязательно содержит поля date, type, channel, topic, objective, notes.',
+      'Допустимые значения type: "post", "article", "visual", "story", "live".',
+      'Если данных не хватает, сделай взвешенные предположения и отметь это в notes.',
+      'Верни ответ ЧИСТОЙ строкой валидного JSON с верхнеуровневыми ключами "schedule" (массив) и "summary" (строка). Никаких комментариев или текста вне JSON.',
+      'Пример: {"schedule":[{"date":"2025-10-28","type":"post","channel":"ВКонтакте","topic":"...","objective":"...","notes":"..."}],"summary":"..."}',
+      formatClause,
     ]
       .filter(Boolean)
-      .join(' ');
+      .join('\n');
 
 
     try {
       const { result: rawJson, tokens } = await ProviderManager.invoke(STRATEGY_MODEL, prompt, 'text');
 
+      const cleaned = cleanJsonString(rawJson);
       let parsed;
       try {
-        parsed = JSON.parse(cleanJsonString(rawJson));
+        parsed = JSON.parse(cleaned);
       } catch (error) {
-        throw new Error('LLM did not return valid JSON for strategy.');
+        const fallbackStart = cleaned.indexOf('{');
+        const fallbackEnd = cleaned.lastIndexOf('}');
+        if (fallbackStart !== -1 && fallbackEnd !== -1 && fallbackEnd > fallbackStart) {
+          const candidate = cleaned.slice(fallbackStart, fallbackEnd + 1);
+          try {
+            parsed = JSON.parse(candidate);
+          } catch (secondaryError) {
+            throw new Error('LLM did not return valid JSON for strategy.');
+          }
+        } else {
+          throw new Error('LLM did not return valid JSON for strategy.');
+        }
       }
 
       const schedule = normalizeSchedule(parsed.schedule);

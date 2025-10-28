@@ -102,6 +102,11 @@ export class MasterAgent {
       }
 
       const updatedTask = TaskStore.getTask(taskId);
+      if (!updatedTask) {
+        console.error(`[MasterAgent] Task ${taskId} no longer exists in TaskStore during scheduling loop.`);
+        completed = true;
+        break;
+      }
       if (updatedTask.status === 'COMPLETED' || updatedTask.status === 'FAILED') {
         completed = true;
         if (typeof onUpdate === 'function') {

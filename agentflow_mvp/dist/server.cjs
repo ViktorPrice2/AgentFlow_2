@@ -86330,24 +86330,81 @@ Error Status: ${error.response.status}`
           console.log(`[API CALL] Calling REAL ${model} for prompt: ${prompt.substring(0, 30)}...`);
           const axiosConfig = {
             headers: { "Content-Type": "application/json" },
-            timeout: 6e4
+            timeout: 18e4,
+            maxBodyLength: Infinity,
+            maxContentLength: Infinity
           };
-          const payload = {
-            contents: [{ role: "user", parts: [{ text: prompt }] }]
+          const callGemini = async (promptText, safeAttempted = false) => {
+            const payload = {
+              contents: [{ role: "user", parts: [{ text: promptText }] }],
+              generationConfig: {
+                temperature: 0.6,
+                topP: 0.95,
+                maxOutputTokens: 1024
+              }
+            };
+            try {
+              const response = await sendRequestWithRetries(url2, payload, axiosConfig);
+              const candidates = response.data.candidates || [];
+              if (candidates.length === 0) {
+                const blockReason = response.data.promptFeedback?.blockReason || "API returned no candidates (possible block/safety reason).";
+                throw new Error(`Gemini API Error: ${blockReason}`);
+              }
+              const firstCandidateWithText = candidates.find(
+                (candidate) => candidate?.content?.parts?.some((part) => typeof part?.text === "string" && part.text.trim().length)
+              );
+              if (!firstCandidateWithText) {
+                const blockReason = response.data.promptFeedback?.blockReason || candidates[0]?.safetyRatings?.[0]?.blockReason || "Candidates contained no text parts.";
+                if (!safeAttempted) {
+                  console.warn("[ProviderManager] No textual content returned. Retrying with safe prompt instructions.");
+                  const safePrompt = `${promptText}
+
+\u041F\u043E\u0436\u0430\u043B\u0443\u0439\u0441\u0442\u0430, \u0441\u0444\u043E\u0440\u043C\u0443\u043B\u0438\u0440\u0443\u0439 \u0431\u0435\u0437\u043E\u043F\u0430\u0441\u043D\u044B\u0439, \u043D\u0435\u0439\u0442\u0440\u0430\u043B\u044C\u043D\u044B\u0439 \u043E\u0442\u0432\u0435\u0442, \u0438\u0437\u0431\u0435\u0433\u0430\u044F \u0437\u0430\u043F\u0440\u0435\u0449\u0451\u043D\u043D\u044B\u0445 \u0438 \u0447\u0443\u0432\u0441\u0442\u0432\u0438\u0442\u0435\u043B\u044C\u043D\u044B\u0445 \u0442\u0435\u043C.`;
+                  return callGemini(safePrompt, true);
+                }
+                throw new Error(`Gemini API Error: ${blockReason}`);
+              }
+              const textPart = firstCandidateWithText.content?.parts?.find(
+                (part) => typeof part?.text === "string" && part.text.trim().length
+              );
+              let text = textPart?.text;
+              if (!text || !text.trim().length) {
+                const aggregatedText = (firstCandidateWithText.content?.parts || []).map((part) => typeof part?.text === "string" ? part.text.trim() : "").filter(Boolean).join("\n");
+                if (aggregatedText && aggregatedText.trim().length) {
+                  text = aggregatedText.trim();
+                } else {
+                  const blockReason = response.data.promptFeedback?.blockReason || firstCandidateWithText?.safetyRatings?.[0]?.blockReason || "Candidate parts missing textual content.";
+                  if (!safeAttempted) {
+                    console.warn("[ProviderManager] Candidate parts empty. Retrying with safe prompt instructions.");
+                    const safePrompt = `${promptText}
+
+\u041F\u043E\u0436\u0430\u043B\u0443\u0439\u0441\u0442\u0430, \u0441\u0444\u043E\u0440\u043C\u0443\u043B\u0438\u0440\u0443\u0439 \u0431\u0435\u0437\u043E\u043F\u0430\u0441\u043D\u044B\u0439, \u043D\u0435\u0439\u0442\u0440\u0430\u043B\u044C\u043D\u044B\u0439 \u043E\u0442\u0432\u0435\u0442, \u0438\u0437\u0431\u0435\u0433\u0430\u044F \u0437\u0430\u043F\u0440\u0435\u0449\u0451\u043D\u043D\u044B\u0445 \u0438 \u0447\u0443\u0432\u0441\u0442\u0432\u0438\u0442\u0435\u043B\u044C\u043D\u044B\u0445 \u0442\u0435\u043C.`;
+                    return callGemini(safePrompt, true);
+                  }
+                  throw new Error(`Gemini API Error: ${blockReason}`);
+                }
+              }
+              const usage = response.data.usageMetadata;
+              const tokens = usage ? usage.totalTokenCount : text.length;
+              return { result: text, tokens, modelUsed: model };
+            } catch (error) {
+              logAxiosError(error, "Text API - Failure");
+              if (!safeAttempted) {
+                console.warn("[ProviderManager] Text call failed. Retrying with safe prompt instructions.");
+                const safePrompt = `${promptText}
+
+\u041F\u043E\u0436\u0430\u043B\u0443\u0439\u0441\u0442\u0430, \u0441\u0444\u043E\u0440\u043C\u0443\u043B\u0438\u0440\u0443\u0439 \u0431\u0435\u0437\u043E\u043F\u0430\u0441\u043D\u044B\u0439, \u043D\u0435\u0439\u0442\u0440\u0430\u043B\u044C\u043D\u044B\u0439 \u043E\u0442\u0432\u0435\u0442, \u0438\u0437\u0431\u0435\u0433\u0430\u044F \u0437\u0430\u043F\u0440\u0435\u0449\u0451\u043D\u043D\u044B\u0445 \u0438 \u0447\u0443\u0432\u0441\u0442\u0432\u0438\u0442\u0435\u043B\u044C\u043D\u044B\u0445 \u0442\u0435\u043C.`;
+                return callGemini(safePrompt, true);
+              }
+              throw new Error(`Request failed with status ${error.response?.status || "Unknown"}. Details in console.`);
+            }
           };
           try {
-            const response = await sendRequestWithRetries(url2, payload, axiosConfig);
-            if (!response.data.candidates || response.data.candidates.length === 0) {
-              const blockReason = response.data.promptFeedback?.blockReason || "API returned no candidates (possible block/safety reason).";
-              throw new Error(`Gemini API Error: ${blockReason}`);
-            }
-            const text = response.data.candidates[0].content.parts[0].text;
-            const usage = response.data.usageMetadata;
-            const tokens = usage ? usage.totalTokenCount : text.length;
-            return { result: text, tokens, modelUsed: model };
+            return await callGemini(prompt);
           } catch (error) {
-            logAxiosError(error, "Text API - Failure");
-            throw new Error(`Request failed with status ${error.response?.status || "Unknown"}. Details in console.`);
+            console.warn(`[ProviderManager] Falling back to safe stub after Gemini failure: ${error.message}`);
+            const fallbackText = `\u0410\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0430\u044F \u0433\u0435\u043D\u0435\u0440\u0430\u0446\u0438\u044F \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u0430: ${error.message}. \u041F\u043E\u0434\u0433\u043E\u0442\u043E\u0432\u044C\u0442\u0435 \u0442\u0435\u043A\u0441\u0442 \u0432\u0440\u0443\u0447\u043D\u0443\u044E \u0438\u043B\u0438 \u043F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435 \u043F\u043E\u0437\u0436\u0435.`;
+            return { result: fallbackText, tokens: 0, modelUsed: `${model}-fallback`, warning: error.message };
           }
         }
         throw new Error(`Provider not configured for model: ${model}`);
@@ -86715,6 +86772,7 @@ function detectToneIssue(content, expectedTone) {
   const normalizedTone = normalize(expectedTone);
   const toneKey = TONE_ALIASES[normalizedTone] || normalizedTone;
   const lowerContent = normalize(content);
+  const displayTone = typeof expectedTone === "string" && expectedTone.trim() || toneKey || "target tone";
   if (process.env.MOCK_MODE === "true") {
     return null;
   }
@@ -86726,10 +86784,10 @@ function detectToneIssue(content, expectedTone) {
     const lacksEnergeticSignals = enthusiasticScore === 0 && exclamations === 0;
     const borderlineEnergetic = enthusiasticScore <= 1 && exclamations <= 1;
     if (hasStrongFormalTone && lacksEnergeticSignals) {
-      return "TONE_MISMATCH: \u0422\u0435\u043A\u0441\u0442 \u0432\u044B\u0433\u043B\u044F\u0434\u0438\u0442 \u043E\u0444\u0438\u0446\u0438\u0430\u043B\u044C\u043D\u044B\u043C \u0438 \u043D\u0435 \u0441\u043E\u0434\u0435\u0440\u0436\u0438\u0442 \u044D\u043C\u043E\u0446\u0438\u043E\u043D\u0430\u043B\u044C\u043D\u044B\u0445 \u043C\u0430\u0440\u043A\u0435\u0440\u043E\u0432.";
+      return 'TONE_MISMATCH: Target tone "' + displayTone + '" needs excitement. Remove bureaucratic phrasing, trim sentences, add vivid verbs and at least one enthusiastic exclamation.';
     }
     if (formalScore >= 3 && borderlineEnergetic) {
-      return "TONE_MISMATCH: \u0421\u043B\u0438\u0448\u043A\u043E\u043C \u043C\u043D\u043E\u0433\u043E \u043A\u0430\u043D\u0446\u0435\u043B\u044F\u0440\u0438\u0442\u0430 \u0434\u043B\u044F \u044D\u043D\u0435\u0440\u0433\u0438\u0447\u043D\u043E\u0433\u043E \u0442\u043E\u043D\u0430.";
+      return "TONE_MISMATCH: Still too formal. Rewrite key sentences with action-oriented language, rallying calls, and energising adjectives.";
     }
     return null;
   }
@@ -86737,10 +86795,10 @@ function detectToneIssue(content, expectedTone) {
     const casualScore = countMarkers(lowerContent, CASUAL_MARKERS);
     const formalScore = countMarkers(lowerContent, FORMAL_MARKERS);
     if (formalScore >= 2 && casualScore === 0) {
-      return "TONE_MISMATCH: \u0422\u0435\u043A\u0441\u0442 \u0437\u0432\u0443\u0447\u0438\u0442 \u043E\u0444\u0438\u0446\u0438\u0430\u043B\u044C\u043D\u043E \u0432\u043C\u0435\u0441\u0442\u043E \u043D\u0435\u043F\u0440\u0438\u043D\u0443\u0436\u0434\u0435\u043D\u043D\u043E\u0433\u043E \u043E\u0431\u0449\u0435\u043D\u0438\u044F.";
+      return 'TONE_MISMATCH: To sound "' + displayTone + '", drop the formal wording and add conversational phrases, direct reader address, and a couple of relaxed interjections.';
     }
     if (formalScore >= 3 && casualScore <= 1) {
-      return "TONE_MISMATCH: \u0412 \u0442\u0435\u043A\u0441\u0442\u0435 \u043F\u0440\u0435\u043E\u0431\u043B\u0430\u0434\u0430\u044E\u0442 \u0434\u0435\u043B\u043E\u0432\u044B\u0435 \u043E\u0431\u043E\u0440\u043E\u0442\u044B \u0438 \u043F\u043E\u0447\u0442\u0438 \u043D\u0435\u0442 \u0440\u0430\u0437\u0433\u043E\u0432\u043E\u0440\u043D\u044B\u0445 \u0432\u044B\u0440\u0430\u0436\u0435\u043D\u0438\u0439.";
+      return "TONE_MISMATCH: Tone is stiff. Swap bureaucratic vocabulary for everyday expressions, simplify sentences, and weave in informal connectors.";
     }
     return null;
   }
@@ -86748,7 +86806,7 @@ function detectToneIssue(content, expectedTone) {
     const friendlyScore = countMarkers(lowerContent, FRIENDLY_MARKERS) + countMarkers(lowerContent, CASUAL_MARKERS);
     const formalScore = countMarkers(lowerContent, FORMAL_MARKERS);
     if (friendlyScore === 0 && formalScore >= 2) {
-      return "TONE_MISMATCH: \u0414\u043B\u044F \u0434\u0440\u0443\u0436\u0435\u043B\u044E\u0431\u043D\u043E\u0433\u043E \u0441\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u044F \u043D\u0435 \u0445\u0432\u0430\u0442\u0430\u0435\u0442 \u0442\u0435\u043F\u043B\u044B\u0445 \u043E\u0431\u0440\u0430\u0449\u0435\u043D\u0438\u0439, \u0437\u0430\u0442\u043E \u043C\u043D\u043E\u0433\u043E \u043E\u0444\u0438\u0446\u0438\u0430\u043B\u044C\u043D\u044B\u0445 \u0444\u0440\u0430\u0437.";
+      return 'TONE_MISMATCH: Friendly tone "' + displayTone + '" needs warmth. Add a soft greeting, empathetic support, encouraging phrasing, and avoid stiff constructions.';
     }
     return null;
   }
@@ -86756,7 +86814,7 @@ function detectToneIssue(content, expectedTone) {
     const playfulScore = countMarkers(lowerContent, PLAYFUL_MARKERS);
     const exclamations = countExclamations(content);
     if (playfulScore === 0 && exclamations <= 1) {
-      return "TONE_MISMATCH: \u041D\u0435 \u0432\u0438\u0434\u043D\u043E \u0438\u0433\u0440\u0438\u0432\u043E\u0433\u043E \u043D\u0430\u0441\u0442\u0440\u043E\u0435\u043D\u0438\u044F \u2014 \u0434\u043E\u0431\u0430\u0432\u044C\u0442\u0435 \u044D\u043C\u043E\u0446\u0438\u0439 \u0438\u043B\u0438 \u043B\u0435\u0433\u043A\u0438\u0445 \u0448\u0443\u0442\u043E\u043A.";
+      return 'TONE_MISMATCH: Playful tone "' + displayTone + '" needs light humour, surprising comparisons, emojis or interjections, plus a couple of lively exclamations.';
     }
     return null;
   }
@@ -86764,7 +86822,7 @@ function detectToneIssue(content, expectedTone) {
     const slangScore = countMarkers(lowerContent, [...CASUAL_MARKERS, ...ENTHUSIASTIC_MARKERS]);
     const exclamations = countExclamations(content);
     if (slangScore >= 2 || slangScore > 0 && exclamations >= 2) {
-      return "TONE_MISMATCH: \u0421\u043B\u0438\u0448\u043A\u043E\u043C \u0440\u0430\u0437\u0433\u043E\u0432\u043E\u0440\u043D\u044B\u0435 \u0432\u044B\u0440\u0430\u0436\u0435\u043D\u0438\u044F \u0434\u043B\u044F \u043F\u0440\u043E\u0444\u0435\u0441\u0441\u0438\u043E\u043D\u0430\u043B\u044C\u043D\u043E\u0433\u043E \u0438\u043B\u0438 \u043E\u0444\u0438\u0446\u0438\u0430\u043B\u044C\u043D\u043E\u0433\u043E \u0442\u0435\u043A\u0441\u0442\u0430.";
+      return 'TONE_MISMATCH: Professional tone "' + displayTone + '" should avoid slang and extra excitement. Replace it with precise statements, facts, and careful transitions.';
     }
     return null;
   }
@@ -87332,26 +87390,40 @@ var init_StrategyAgent = __esm({
           return strategyResult;
         }
         const prompt = [
-          "\u0412\u044B \u2014 \u0441\u0442\u0440\u0430\u0442\u0435\u0433 \u043F\u043E \u043C\u0430\u0440\u043A\u0435\u0442\u0438\u043D\u0433\u0443. \u041D\u0430 \u043E\u0441\u043D\u043E\u0432\u0435 \u0430\u043D\u0430\u043B\u0438\u0442\u0438\u043A\u0438 \u043F\u043E\u0434\u0433\u043E\u0442\u043E\u0432\u044C \u0434\u0435\u0442\u0430\u043B\u044C\u043D\u044B\u0439 \u043F\u043B\u0430\u043D \u043A\u043E\u043C\u043C\u0443\u043D\u0438\u043A\u0430\u0446\u0438\u0439 \u043D\u0430 \u0432\u0435\u0441\u044C \u043F\u0435\u0440\u0438\u043E\u0434 \u043A\u0430\u043C\u043F\u0430\u043D\u0438\u0438.",
-          "\u0422\u0435\u043C\u0430 \u043A\u0430\u043C\u043F\u0430\u043D\u0438\u0438: " + topic + ".",
-          "\u0414\u043B\u0438\u0442\u0435\u043B\u044C\u043D\u043E\u0441\u0442\u044C \u043A\u0430\u043C\u043F\u0430\u043D\u0438\u0438: " + campaignDuration + ".",
-          "\u0426\u0435\u043B\u044C \u043A\u0430\u043C\u043F\u0430\u043D\u0438\u0438: " + campaignGoal + ".",
+          "\u0422\u044B \u2014 \u0441\u0442\u0440\u0430\u0442\u0435\u0433 \u043F\u043E \u043C\u0430\u0440\u043A\u0435\u0442\u0438\u043D\u0433\u0443. \u0418\u0441\u043F\u043E\u043B\u044C\u0437\u0443\u0439 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u044B \u0430\u043D\u0430\u043B\u0438\u0437\u0430, \u0447\u0442\u043E\u0431\u044B \u043F\u043E\u0434\u0433\u043E\u0442\u043E\u0432\u0438\u0442\u044C \u043F\u043E\u0434\u0440\u043E\u0431\u043D\u044B\u0439 \u043C\u0435\u0434\u0438\u0430\u043F\u043B\u0430\u043D \u043D\u0430 \u0432\u0435\u0441\u044C \u043F\u0435\u0440\u0438\u043E\u0434 \u043A\u0430\u043C\u043F\u0430\u043D\u0438\u0438.",
+          `\u0422\u0435\u043C\u0430 \u043A\u0430\u043C\u043F\u0430\u043D\u0438\u0438: ${topic}.`,
+          `\u0414\u043B\u0438\u0442\u0435\u043B\u044C\u043D\u043E\u0441\u0442\u044C \u043A\u0430\u043C\u043F\u0430\u043D\u0438\u0438: ${campaignDuration}.`,
+          `\u0426\u0435\u043B\u044C \u043A\u0430\u043C\u043F\u0430\u043D\u0438\u0438: ${campaignGoal}.`,
           distributionSentence,
-          "\u041A\u043B\u044E\u0447\u0435\u0432\u044B\u0435 \u043C\u0435\u0442\u0440\u0438\u043A\u0438 (KQM) \u0438\u0437 \u0430\u043D\u0430\u043B\u0438\u0442\u0438\u043A\u0438: " + kqm + ".",
-          "\u0420\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u043E\u0432\u0430\u043D\u043D\u044B\u0435 \u043A\u0430\u043D\u0430\u043B\u044B \u0438\u0437 \u0430\u043D\u0430\u043B\u0438\u0442\u0438\u043A\u0438: " + channels + ".",
-          insights ? "\u0413\u043B\u0430\u0432\u043D\u044B\u0435 \u0438\u043D\u0441\u0430\u0439\u0442\u044B: " + insights + "." : "",
-          "\u0421\u0444\u043E\u0440\u043C\u0438\u0440\u0443\u0439 \u0440\u0430\u0441\u043F\u0438\u0441\u0430\u043D\u0438\u0435 \u0430\u043A\u0442\u0438\u0432\u043D\u043E\u0441\u0442\u0435\u0439 \u043D\u0430 \u0432\u0435\u0441\u044C \u043F\u0435\u0440\u0438\u043E\u0434. \u0414\u043B\u044F \u043A\u0430\u0436\u0434\u043E\u0439 \u0434\u0430\u0442\u044B \u0443\u043A\u0430\u0436\u0438 \u0444\u043E\u0440\u043C\u0430\u0442, \u043F\u043B\u043E\u0449\u0430\u0434\u043A\u0443, \u0442\u0435\u043C\u0443 \u0441\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u044F, \u0446\u0435\u043B\u044C \u0438 \u0437\u0430\u043C\u0435\u0442\u043A\u0438/CTA.",
-          "\u041F\u043E\u043A\u0430\u0436\u0438, \u043A\u0430\u043A \u043F\u043B\u0430\u043D \u043F\u043E\u0434\u0434\u0435\u0440\u0436\u0438\u0432\u0430\u0435\u0442 \u0437\u0430\u044F\u0432\u043B\u0435\u043D\u043D\u0443\u044E \u0446\u0435\u043B\u044C \u0438 \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u044B\u0435 \u043F\u043B\u043E\u0449\u0430\u0434\u043A\u0438, \u0443\u0447\u0438\u0442\u044B\u0432\u0430\u0439 \u043B\u043E\u0433\u0438\u0441\u0442\u0438\u043A\u0443 \u0438 \u0437\u0430\u0432\u0438\u0441\u0438\u043C\u043E\u0441\u0442\u044C \u0448\u0430\u0433\u043E\u0432.",
-          '\u041E\u0442\u0432\u0435\u0442 \u0432\u0435\u0440\u043D\u0438 \u0441\u0442\u0440\u043E\u0433\u043E \u0432 JSON {"schedule": [{"date": "YYYY-MM-DD", "type": "post/article/visual", "channel": "...", "topic": "...", "objective": "...", "notes": "..."}], "summary": "..."} \u0431\u0435\u0437 \u0434\u043E\u043F\u043E\u043B\u043D\u0438\u0442\u0435\u043B\u044C\u043D\u043E\u0433\u043E \u0442\u0435\u043A\u0441\u0442\u0430.',
-          "\u0423\u0447\u0442\u0438 \u0434\u043E\u043F\u043E\u043B\u043D\u0438\u0442\u0435\u043B\u044C\u043D\u044B\u0435 \u0442\u0440\u0435\u0431\u043E\u0432\u0430\u043D\u0438\u044F \u043A \u0444\u043E\u0440\u043C\u0430\u0442\u0443." + formatClause
-        ].filter(Boolean).join(" ");
+          `\u041A\u043B\u044E\u0447\u0435\u0432\u044B\u0435 \u043C\u0435\u0442\u0440\u0438\u043A\u0438 \u0443\u0441\u043F\u0435\u0445\u0430 (KQM): ${kqm}.`,
+          `\u0420\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u043E\u0432\u0430\u043D\u043D\u044B\u0435 \u043A\u0430\u043D\u0430\u043B\u044B: ${channels}.`,
+          insights ? `\u0414\u043E\u043F\u043E\u043B\u043D\u0438\u0442\u0435\u043B\u044C\u043D\u044B\u0435 \u0438\u043D\u0441\u0430\u0439\u0442\u044B: ${insights}.` : "",
+          "\u0421\u0444\u043E\u0440\u043C\u0438\u0440\u0443\u0439 \u0440\u0430\u0441\u043F\u0438\u0441\u0430\u043D\u0438\u0435 \u0430\u043A\u0442\u0438\u0432\u043D\u043E\u0441\u0442\u0435\u0439 (\u043D\u0435 \u0431\u043E\u043B\u0435\u0435 6 \u0437\u0430\u043F\u0438\u0441\u0435\u0439), \u0440\u0430\u0432\u043D\u043E\u043C\u0435\u0440\u043D\u043E \u043E\u0445\u0432\u0430\u0442\u044B\u0432\u0430\u044F \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u044B\u0435 \u043F\u043B\u043E\u0449\u0430\u0434\u043A\u0438. \u041A\u0430\u0436\u0434\u044B\u0439 \u044D\u043B\u0435\u043C\u0435\u043D\u0442 \u043E\u0431\u044F\u0437\u0430\u0442\u0435\u043B\u044C\u043D\u043E \u0441\u043E\u0434\u0435\u0440\u0436\u0438\u0442 \u043F\u043E\u043B\u044F date, type, channel, topic, objective, notes.",
+          '\u0414\u043E\u043F\u0443\u0441\u0442\u0438\u043C\u044B\u0435 \u0437\u043D\u0430\u0447\u0435\u043D\u0438\u044F type: "post", "article", "visual", "story", "live".',
+          "\u0415\u0441\u043B\u0438 \u0434\u0430\u043D\u043D\u044B\u0445 \u043D\u0435 \u0445\u0432\u0430\u0442\u0430\u0435\u0442, \u0441\u0434\u0435\u043B\u0430\u0439 \u0432\u0437\u0432\u0435\u0448\u0435\u043D\u043D\u044B\u0435 \u043F\u0440\u0435\u0434\u043F\u043E\u043B\u043E\u0436\u0435\u043D\u0438\u044F \u0438 \u043E\u0442\u043C\u0435\u0442\u044C \u044D\u0442\u043E \u0432 notes.",
+          '\u0412\u0435\u0440\u043D\u0438 \u043E\u0442\u0432\u0435\u0442 \u0427\u0418\u0421\u0422\u041E\u0419 \u0441\u0442\u0440\u043E\u043A\u043E\u0439 \u0432\u0430\u043B\u0438\u0434\u043D\u043E\u0433\u043E JSON \u0441 \u0432\u0435\u0440\u0445\u043D\u0435\u0443\u0440\u043E\u0432\u043D\u0435\u0432\u044B\u043C\u0438 \u043A\u043B\u044E\u0447\u0430\u043C\u0438 "schedule" (\u043C\u0430\u0441\u0441\u0438\u0432) \u0438 "summary" (\u0441\u0442\u0440\u043E\u043A\u0430). \u041D\u0438\u043A\u0430\u043A\u0438\u0445 \u043A\u043E\u043C\u043C\u0435\u043D\u0442\u0430\u0440\u0438\u0435\u0432 \u0438\u043B\u0438 \u0442\u0435\u043A\u0441\u0442\u0430 \u0432\u043D\u0435 JSON.',
+          '\u041F\u0440\u0438\u043C\u0435\u0440: {"schedule":[{"date":"2025-10-28","type":"post","channel":"\u0412\u041A\u043E\u043D\u0442\u0430\u043A\u0442\u0435","topic":"...","objective":"...","notes":"..."}],"summary":"..."}',
+          formatClause
+        ].filter(Boolean).join("\n");
         try {
           const { result: rawJson, tokens } = await ProviderManager.invoke(STRATEGY_MODEL, prompt, "text");
+          const cleaned = cleanJsonString3(rawJson);
           let parsed;
           try {
-            parsed = JSON.parse(cleanJsonString3(rawJson));
+            parsed = JSON.parse(cleaned);
           } catch (error) {
-            throw new Error("LLM did not return valid JSON for strategy.");
+            const fallbackStart = cleaned.indexOf("{");
+            const fallbackEnd = cleaned.lastIndexOf("}");
+            if (fallbackStart !== -1 && fallbackEnd !== -1 && fallbackEnd > fallbackStart) {
+              const candidate = cleaned.slice(fallbackStart, fallbackEnd + 1);
+              try {
+                parsed = JSON.parse(candidate);
+              } catch (secondaryError) {
+                throw new Error("LLM did not return valid JSON for strategy.");
+              }
+            } else {
+              throw new Error("LLM did not return valid JSON for strategy.");
+            }
           }
           const schedule = normalizeSchedule(parsed.schedule);
           const strategyResult = {
@@ -87721,6 +87793,11 @@ var MasterAgent = class _MasterAgent {
         }
       }
       const updatedTask = TaskStore.getTask(taskId);
+      if (!updatedTask) {
+        console.error(`[MasterAgent] Task ${taskId} no longer exists in TaskStore during scheduling loop.`);
+        completed = true;
+        break;
+      }
       if (updatedTask.status === "COMPLETED" || updatedTask.status === "FAILED") {
         completed = true;
         if (typeof onUpdate === "function") {
