@@ -43,17 +43,17 @@ function formatInstructionsToText(formatData) {
 
   if (Array.isArray(formatData)) {
     const parts = formatData.map(normalizeEntry).filter(Boolean);
-    return parts.length ? ` Формат и ограничения: ${parts.join('; ')}.` : '';
+    return parts.length ? ` Дополнительно учти формат: ${parts.join('; ')}.` : '';
   }
 
   if (typeof formatData === 'object') {
     const parts = Object.entries(formatData)
       .map(([key, value]) => `${key}: ${value}`.trim())
       .filter(Boolean);
-    return parts.length ? ` Формат и ограничения: ${parts.join('; ')}.` : '';
+    return parts.length ? ` Дополнительно учти формат: ${parts.join('; ')}.` : '';
   }
 
-  return ` Формат и ограничения: ${String(formatData).trim()}.`;
+  return ` Дополнительно учти формат: ${String(formatData).trim()}.`;
 }
 
 export class ProductAnalysisAgent {
@@ -71,6 +71,14 @@ export class ProductAnalysisAgent {
     const baseText = upstreamResult?.approvedContent || upstreamResult?.text || '';
     const topic = node.input_data?.topic || 'Продукт';
     const formatClause = formatInstructionsToText(node.input_data?.format);
+    const campaignDuration = node.input_data?.campaign_duration || '1 месяц';
+    const campaignGoal = node.input_data?.campaign_goal || 'Увеличить вовлечённость текущей аудитории';
+    const distributionChannels = Array.isArray(node.input_data?.distribution_channels)
+      ? node.input_data.distribution_channels
+      : [];
+    const channelsSentence = distributionChannels.length
+      ? `Учитывай выбранные площадки для продвижения: ${distributionChannels.join(', ')}.`
+      : '';
     const isMockMode = process.env.MOCK_MODE === 'true';
 
     if (isMockMode) {
@@ -97,14 +105,21 @@ export class ProductAnalysisAgent {
     }
 
     const prompt = [
-      'Вы — старший аналитик по маркетингу. На основе входного текста и темы составьте краткий анализ продукта.',
-      `Тема продукта: ${topic}.`,
-      baseText ? `Ключевой текст: ${baseText}` : 'Текстовое описание отсутствует, опирайтесь на тему и формат.',
-      'Определите минимум три ключевые метрики качества продукта (KQM) и три основных канала продвижения.',
-      'Если информации недостаточно, делайте разумные предположения и помечайте их как гипотезы.',
-      'Ответ верните строго в формате JSON со структурой: {"kqm": ["..."], "channels": ["..."], "insights": ["..."]}.',
-      'Не добавляйте пояснений вне JSON.' + formatClause,
-    ].join(' ');
+      'Вы — старший маркетинговый аналитик. На основе входных данных подготовь основу для стратегии продукта.',
+      'Тема кампании: ' + topic + '.',
+      'Длительность кампании: ' + campaignDuration + '.',
+      'Цель кампании: ' + campaignGoal + '.',
+      channelsSentence,
+      (baseText ? 'Используй утверждённые материалы: ' + baseText : 'Если утверждённых текстов нет, опирайся на собственный анализ.'),
+      'Сформулируй 2–3 ключевые метрики успеха (KQM), которые покажут, что кампания достигает цели.',
+      'Определи основные каналы продвижения, объяснив их роль и ожидаемый вклад.',
+      'Добавь краткие аналитические инсайты и рекомендации по коммуникациям.',
+      'Ответ верни строго в формате JSON {"kqm": ["..."], "channels": ["..."], "insights": ["..."]} без объяснений или текста вне JSON.',
+      'Учти дополнительные требования к формату.' + formatClause,
+    ]
+      .filter(Boolean)
+      .join(' ');
+
 
     try {
       const { result: rawJson, tokens } = await ProviderManager.invoke(ANALYSIS_MODEL, prompt, 'text');

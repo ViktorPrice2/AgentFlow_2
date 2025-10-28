@@ -261,6 +261,10 @@ app.post('/api/tasks/start', async (req, res) => {
       includeImage,
       includeVideo,
       contentFormat,
+      campaignDuration,
+      campaignGoal,
+      campaignGoalCustom,
+      distributionChannels,
     } = req.body || {};
     const plan = JSON.parse(dagTemplate);
 
@@ -296,6 +300,30 @@ app.post('/api/tasks/start', async (req, res) => {
     };
 
     const normalizedFormat = normalizeFormat(contentFormat);
+    const normalizeChannels = raw => {
+      if (Array.isArray(raw)) {
+        return raw
+          .map(item => (typeof item === 'string' ? item.trim() : ''))
+          .filter(item => item.length)
+          .filter((item, index, arr) => arr.indexOf(item) === index);
+      }
+      return [];
+    };
+
+    const normalizedDuration = typeof campaignDuration === 'string' && campaignDuration.trim()
+      ? campaignDuration.trim()
+      : '1 месяц';
+    const normalizedGoal = (() => {
+      const trimmedGoalCustom = typeof campaignGoalCustom === 'string' ? campaignGoalCustom.trim() : '';
+      if ((campaignGoal === 'custom' || !campaignGoal) && trimmedGoalCustom) {
+        return trimmedGoalCustom;
+      }
+      if (typeof campaignGoal === 'string' && campaignGoal.trim()) {
+        return campaignGoal.trim();
+      }
+      return 'Увеличить вовлечённость текущей аудитории';
+    })();
+    const normalizedChannels = normalizeChannels(distributionChannels);
 
     const getFormatClone = () => normalizedFormat.map(entry => ({ ...entry }));
 
@@ -311,6 +339,9 @@ app.post('/api/tasks/start', async (req, res) => {
           topic: taskTopic ?? node.input?.topic,
           tone: taskTone ?? node.input?.tone,
           format: getFormatClone(),
+          campaign_duration: normalizedDuration,
+          campaign_goal: normalizedGoal,
+          distribution_channels: [...normalizedChannels],
         };
       }
 
@@ -319,6 +350,9 @@ app.post('/api/tasks/start', async (req, res) => {
           ...node.input,
           topic: taskTopic ?? node.input?.topic,
           format: getFormatClone(),
+          campaign_duration: normalizedDuration,
+          campaign_goal: normalizedGoal,
+          distribution_channels: [...normalizedChannels],
         };
       }
     });

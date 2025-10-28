@@ -43,17 +43,17 @@ function formatInstructionsToText(formatData) {
 
   if (Array.isArray(formatData)) {
     const parts = formatData.map(normalizeEntry).filter(Boolean);
-    return parts.length ? ` Формат публикаций: ${parts.join('; ')}.` : '';
+    return parts.length ? ` Дополнительно учти формат: ${parts.join('; ')}.` : '';
   }
 
   if (typeof formatData === 'object') {
     const parts = Object.entries(formatData)
       .map(([key, value]) => `${key}: ${value}`.trim())
       .filter(Boolean);
-    return parts.length ? ` Формат публикаций: ${parts.join('; ')}.` : '';
+    return parts.length ? ` Дополнительно учти формат: ${parts.join('; ')}.` : '';
   }
 
-  return ` Формат публикаций: ${String(formatData).trim()}.`;
+  return ` Дополнительно учти формат: ${String(formatData).trim()}.`;
 }
 
 function normalizeSchedule(schedule) {
@@ -94,6 +94,15 @@ export class StrategyAgent {
     const analysisResult = analysisNodeId ? TaskStore.getResult(analysisNodeId) : null;
     const topic = node.input_data?.topic || 'Контент-стратегия';
     const formatClause = formatInstructionsToText(node.input_data?.format);
+    const campaignDuration = node.input_data?.campaign_duration || '1 месяц';
+    const campaignGoal = node.input_data?.campaign_goal || 'Увеличить вовлечённость текущей аудитории';
+    const distributionChannels = Array.isArray(node.input_data?.distribution_channels)
+      ? node.input_data.distribution_channels
+      : [];
+    const distributionSentence = distributionChannels.length
+      ? `Учитывай выбранные площадки для дистрибуции: ${distributionChannels.join(', ')}.`
+      : '';
+
     const isMockMode = process.env.MOCK_MODE === 'true';
 
     const kqm = Array.isArray(analysisResult?.kqm) && analysisResult.kqm.length
@@ -150,18 +159,22 @@ export class StrategyAgent {
     }
 
     const prompt = [
-      'Вы — маркетолог-стратег. На основе анализа продукта создайте подробный план контента на 5 дней.',
-      `Тема кампании: ${topic}.`,
-      `KQM: ${kqm}.`,
-      `Каналы продвижения: ${channels}.`,
-      insights ? `Дополнительные инсайты: ${insights}.` : '',
-      'Каждый день должен включать тип публикации, ключевой канал и идею темы/сюжета.',
-      'Добавьте поле "objective" (цель коммуникации) и "notes" (ключевой призыв или формат).',
-      'Ответ должен быть в формате JSON: {"schedule": [{"date": "YYYY-MM-DD", "type": "post/article/visual", "channel": "...", "topic": "...", "objective": "...", "notes": "..."}], "summary": "..."}.',
-      'Не добавляйте пояснений вне JSON.' + formatClause,
+      'Вы — стратег по маркетингу. На основе аналитики подготовь детальный план коммуникаций на весь период кампании.',
+      'Тема кампании: ' + topic + '.',
+      'Длительность кампании: ' + campaignDuration + '.',
+      'Цель кампании: ' + campaignGoal + '.',
+      distributionSentence,
+      'Ключевые метрики (KQM) из аналитики: ' + kqm + '.',
+      'Рекомендованные каналы из аналитики: ' + channels + '.',
+      (insights ? 'Главные инсайты: ' + insights + '.' : ''),
+      'Сформируй расписание активностей на весь период. Для каждой даты укажи формат, площадку, тему сообщения, цель и заметки/CTA.',
+      'Покажи, как план поддерживает заявленную цель и выбранные площадки, учитывай логистику и зависимость шагов.',
+      'Ответ верни строго в JSON {"schedule": [{"date": "YYYY-MM-DD", "type": "post/article/visual", "channel": "...", "topic": "...", "objective": "...", "notes": "..."}], "summary": "..."} без дополнительного текста.',
+      'Учти дополнительные требования к формату.' + formatClause,
     ]
       .filter(Boolean)
       .join(' ');
+
 
     try {
       const { result: rawJson, tokens } = await ProviderManager.invoke(STRATEGY_MODEL, prompt, 'text');

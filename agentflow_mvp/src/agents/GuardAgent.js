@@ -150,6 +150,7 @@ function detectToneIssue(content, expectedTone) {
   const normalizedTone = normalize(expectedTone);
   const toneKey = TONE_ALIASES[normalizedTone] || normalizedTone;
   const lowerContent = normalize(content);
+  const displayTone = (typeof expectedTone === 'string' && expectedTone.trim()) || toneKey || 'target tone';
 
   if (process.env.MOCK_MODE === 'true') {
     return null;
@@ -165,11 +166,11 @@ function detectToneIssue(content, expectedTone) {
     const borderlineEnergetic = enthusiasticScore <= 1 && exclamations <= 1;
 
     if (hasStrongFormalTone && lacksEnergeticSignals) {
-      return 'TONE_MISMATCH: Текст выглядит официальным и не содержит эмоциональных маркеров.';
+      return 'TONE_MISMATCH: Target tone "' + displayTone + '" needs excitement. Remove bureaucratic phrasing, trim sentences, add vivid verbs and at least one enthusiastic exclamation.';
     }
 
     if (formalScore >= 3 && borderlineEnergetic) {
-      return 'TONE_MISMATCH: Слишком много канцелярита для энергичного тона.';
+      return 'TONE_MISMATCH: Still too formal. Rewrite key sentences with action-oriented language, rallying calls, and energising adjectives.';
     }
 
     return null;
@@ -180,11 +181,11 @@ function detectToneIssue(content, expectedTone) {
     const formalScore = countMarkers(lowerContent, FORMAL_MARKERS);
 
     if (formalScore >= 2 && casualScore === 0) {
-      return 'TONE_MISMATCH: Текст звучит официально вместо непринужденного общения.';
+      return 'TONE_MISMATCH: To sound "' + displayTone + '", drop the formal wording and add conversational phrases, direct reader address, and a couple of relaxed interjections.';
     }
 
     if (formalScore >= 3 && casualScore <= 1) {
-      return 'TONE_MISMATCH: В тексте преобладают деловые обороты и почти нет разговорных выражений.';
+      return 'TONE_MISMATCH: Tone is stiff. Swap bureaucratic vocabulary for everyday expressions, simplify sentences, and weave in informal connectors.';
     }
 
     return null;
@@ -195,7 +196,7 @@ function detectToneIssue(content, expectedTone) {
     const formalScore = countMarkers(lowerContent, FORMAL_MARKERS);
 
     if (friendlyScore === 0 && formalScore >= 2) {
-      return 'TONE_MISMATCH: Для дружелюбного сообщения не хватает теплых обращений, зато много официальных фраз.';
+      return 'TONE_MISMATCH: Friendly tone "' + displayTone + '" needs warmth. Add a soft greeting, empathetic support, encouraging phrasing, and avoid stiff constructions.';
     }
 
     return null;
@@ -206,7 +207,7 @@ function detectToneIssue(content, expectedTone) {
     const exclamations = countExclamations(content);
 
     if (playfulScore === 0 && exclamations <= 1) {
-      return 'TONE_MISMATCH: Не видно игривого настроения — добавьте эмоций или легких шуток.';
+      return 'TONE_MISMATCH: Playful tone "' + displayTone + '" needs light humour, surprising comparisons, emojis or interjections, plus a couple of lively exclamations.';
     }
 
     return null;
@@ -217,7 +218,7 @@ function detectToneIssue(content, expectedTone) {
     const exclamations = countExclamations(content);
 
     if (slangScore >= 2 || (slangScore > 0 && exclamations >= 2)) {
-      return 'TONE_MISMATCH: Слишком разговорные выражения для профессионального или официального текста.';
+      return 'TONE_MISMATCH: Professional tone "' + displayTone + '" should avoid slang and extra excitement. Replace it with precise statements, facts, and careful transitions.';
     }
 
     return null;

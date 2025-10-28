@@ -316,6 +316,61 @@
             min-height: 80px;
         }
 
+
+        .distribution-section {
+            margin-top: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .channel-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+        }
+
+        .channel-option {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 12px;
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            background: rgba(241, 245, 249, 0.7);
+            cursor: pointer;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+            font-weight: 500;
+        }
+
+        .channel-option input {
+            margin: 0;
+        }
+
+        .channel-option:hover {
+            border-color: rgba(37, 99, 235, 0.45);
+            box-shadow: 0 6px 18px rgba(59, 130, 246, 0.12);
+        }
+
+        .channel-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        .channel-icon.vk { background: #2787f5; }
+        .channel-icon.tg { background: #2aabee; }
+        .channel-icon.yt { background: #ff0000; }
+        .channel-icon.dz { background: #ffcc00; color: #1f2937; }
+        .channel-icon.ok { background: #ff8200; }
+        .channel-icon.rt { background: #4b65d1; }
+
         button {
             cursor: pointer;
             font-family: inherit;
@@ -955,6 +1010,33 @@
                     </select>
                 </label>
             </div>
+            <div class="task-form-grid">
+                <label class="input-group">
+                    Длительность кампании
+                    <select id="campaignDuration">
+                        <option value="1 неделя">1 неделя</option>
+                        <option value="2 недели">2 недели</option>
+                        <option value="1 месяц" selected>1 месяц</option>
+                        <option value="3 месяца">3 месяца</option>
+                        <option value="6 месяцев">6 месяцев</option>
+                    </select>
+                </label>
+                <label class="input-group">
+                    Цель кампании
+                    <select id="campaignGoal">
+                        <option value="Увеличить вовлечённость текущей аудитории" selected>Увеличить вовлечённость текущей аудитории</option>
+                        <option value="Рост подписчиков и подписок">Рост подписчиков и подписок</option>
+                        <option value="Рост продаж и лидов">Рост продаж и лидов</option>
+                        <option value="Укрепить имидж бренда">Укрепить имидж бренда</option>
+                        <option value="Поддержать запуск продукта">Поддержать запуск продукта</option>
+                        <option value="custom">Другая цель</option>
+                    </select>
+                </label>
+                <label class="input-group" id="campaignGoalCustomGroup" style="display: none;">
+                    Своя формулировка цели
+                    <input type="text" id="campaignGoalCustom" placeholder="Например, собрать предзаказы или организовать событие">
+                </label>
+            </div>
             <div class="media-options">
                 <label class="checkbox">
                     <input type="checkbox" id="taskGenerateImage" checked>
@@ -977,12 +1059,47 @@
                         <input type="text" id="formatAudience" placeholder="Миллениалы">
                     </label>
                     <label class="input-group">
-                        Канал распространения
-                        <input type="text" id="formatChannel" placeholder="Instagram, YouTube...">
-                    </label>
-                    <label class="input-group">
                         Призыв к действию
                         <input type="text" id="formatCTA" placeholder="Записаться на демо">
+                    </label>
+                </div>
+                <div class="distribution-section" id="distributionChannelsSection">
+                    <h3>Каналы распространения</h3>
+                    <div class="channel-grid">
+                        <label class="channel-option">
+                            <input type="checkbox" name="distributionChannel" value="ВКонтакте">
+                            <span class="channel-icon vk">VK</span>
+                            <span>ВКонтакте</span>
+                        </label>
+                        <label class="channel-option">
+                            <input type="checkbox" name="distributionChannel" value="Telegram">
+                            <span class="channel-icon tg">TG</span>
+                            <span>Telegram</span>
+                        </label>
+                        <label class="channel-option">
+                            <input type="checkbox" name="distributionChannel" value="YouTube">
+                            <span class="channel-icon yt">YT</span>
+                            <span>YouTube</span>
+                        </label>
+                        <label class="channel-option">
+                            <input type="checkbox" name="distributionChannel" value="Дзен">
+                            <span class="channel-icon dz">DZ</span>
+                            <span>Дзен</span>
+                        </label>
+                        <label class="channel-option">
+                            <input type="checkbox" name="distributionChannel" value="Одноклассники">
+                            <span class="channel-icon ok">OK</span>
+                            <span>Одноклассники</span>
+                        </label>
+                        <label class="channel-option">
+                            <input type="checkbox" name="distributionChannel" value="Rutube">
+                            <span class="channel-icon rt">RT</span>
+                            <span>Rutube</span>
+                        </label>
+                    </div>
+                    <label class="input-group">
+                        Другой канал
+                        <input type="text" id="customDistributionChannel" placeholder="Укажите другой канал продвижения">
                     </label>
                 </div>
                 <label class="input-group">
@@ -1044,9 +1161,14 @@
         const taskGenerateVideo = document.getElementById('taskGenerateVideo');
         const formatLength = document.getElementById('formatLength');
         const formatAudience = document.getElementById('formatAudience');
-        const formatChannel = document.getElementById('formatChannel');
         const formatCTA = document.getElementById('formatCTA');
         const formatNotes = document.getElementById('formatNotes');
+        const campaignDurationSelect = document.getElementById('campaignDuration');
+        const campaignGoalSelect = document.getElementById('campaignGoal');
+        const campaignGoalCustomGroup = document.getElementById('campaignGoalCustomGroup');
+        const campaignGoalCustomInput = document.getElementById('campaignGoalCustom');
+        const distributionChannelInputs = Array.from(document.querySelectorAll('#distributionChannelsSection input[type="checkbox"][name="distributionChannel"]'));
+        const customChannelInput = document.getElementById('customDistributionChannel');
         const taskPromptPreview = document.getElementById('taskPromptPreview');
         const proxyForm = document.getElementById('proxyForm');
         const proxyHost = document.getElementById('proxyHost');
@@ -1058,7 +1180,19 @@
         const proxyStatus = document.getElementById('proxyStatus');
         const apiKeyForm = document.getElementById('apiKeyForm');
         const geminiApiKeyInput = document.getElementById('geminiApiKey');
+
         const apiKeyStatus = document.getElementById('apiKeyStatus');
+
+        campaignGoalSelect.addEventListener('change', () => {
+            const useCustomGoal = campaignGoalSelect.value === 'custom';
+            campaignGoalCustomGroup.style.display = useCustomGoal ? 'block' : 'none';
+            if (!useCustomGoal) {
+                campaignGoalCustomInput.value = '';
+            }
+        });
+
+        campaignGoalSelect.dispatchEvent(new Event('change'));
+
 
         let activeTaskId = null;
         let network = null;
@@ -1366,7 +1500,6 @@
             const entries = [
                 { label: 'Длина', value: formatLength.value.trim() },
                 { label: 'Целевая аудитория', value: formatAudience.value.trim() },
-                { label: 'Канал фокуса', value: formatChannel.value.trim() },
                 { label: 'CTA', value: formatCTA.value.trim() },
             ].filter(entry => entry.value);
 
@@ -1387,11 +1520,35 @@
                 const includeImage = taskGenerateImage.checked;
                 const includeVideo = taskGenerateVideo.checked;
                 const contentFormat = buildContentFormatPayload();
+                const campaignDuration = campaignDurationSelect.value;
+                const selectedCampaignGoal = campaignGoalSelect.value;
+                const campaignGoalCustom = selectedCampaignGoal === 'custom' ? campaignGoalCustomInput.value.trim() : '';
+                if (selectedCampaignGoal === 'custom' && !campaignGoalCustom) {
+                    alert('Укажите цель кампании или выберите вариант из списка.');
+                    startTaskBtn.disabled = false;
+                    return;
+                }
+                const distributionChannels = distributionChannelInputs.filter(input => input.checked).map(input => input.value);
+                const customChannelValue = customChannelInput.value.trim();
+                if (customChannelValue) {
+                    distributionChannels.push(customChannelValue);
+                }
 
                 const response = await fetch('/api/tasks/start', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ taskName, taskTopic, taskTone, includeImage, includeVideo, contentFormat })
+                    body: JSON.stringify({
+                        taskName,
+                        taskTopic,
+                        taskTone,
+                        campaignDuration,
+                        campaignGoal: selectedCampaignGoal,
+                        campaignGoalCustom,
+                        distributionChannels,
+                        includeImage,
+                        includeVideo,
+                        contentFormat
+                    })
                 });
                 const payload = await response.json();
 
