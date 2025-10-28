@@ -43,17 +43,62 @@ function formatInstructionsToText(formatData) {
 
   if (Array.isArray(formatData)) {
     const parts = formatData.map(normalizeEntry).filter(Boolean);
-    return parts.length ? ` Дополнительно учти формат: ${parts.join('; ')}.` : '';
+    return parts.length ? ` Формат и ограничения: ${parts.join('; ')}.` : '';
   }
 
   if (typeof formatData === 'object') {
     const parts = Object.entries(formatData)
       .map(([key, value]) => `${key}: ${value}`.trim())
       .filter(Boolean);
-    return parts.length ? ` Дополнительно учти формат: ${parts.join('; ')}.` : '';
+    return parts.length ? ` Формат и ограничения: ${parts.join('; ')}.` : '';
   }
 
-  return ` Дополнительно учти формат: ${String(formatData).trim()}.`;
+  return ` Формат и ограничения: ${String(formatData).trim()}.`;
+}
+
+function buildFallbackAnalysis({ topic, baseText, distributionChannels = [] }) {
+  const defaultChannels = ['Соцсети', 'Email-рассылки', 'Партнёрские интеграции'];
+  const channels = distributionChannels.length ? distributionChannels : defaultChannels;
+
+  const insights = baseText
+    ? [
+        `Используйте ключевые идеи из утверждённых материалов: ${baseText.slice(0, 120)}...`,
+        'Проведите A/B тесты для уточнения месседжинга и корректировки KPI.',
+      ]
+    : [
+        'Сформулируйте гипотезы по позиционированию и подтвердите их быстрыми исследованиями.',
+        'Добавьте UGC/социальные доказательства, чтобы повысить доверие аудитории.',
+      ];
+
+  return {
+    kqm: [
+      `Увеличить узнаваемость ${topic} среди целевой аудитории`,
+      'Достичь целевого CTR и вовлечённости в ключевых каналах',
+      'Собрать качественные лиды и сформировать повторные касания',
+    ],
+    channels,
+    insights,
+    meta: {
+      model: `${ANALYSIS_MODEL}-fallback`,
+      tokens: 0,
+      prompt: null,
+      warning: 'LLM output unavailable. Generated heuristic fallback.',
+    },
+  };
+}
+
+function attachMeta(result, meta) {
+  if (!result.meta) {
+    result.meta = {};
+  }
+
+  Object.assign(result.meta, meta);
+
+  if (!result.meta.warning) {
+    delete result.meta.warning;
+  }
+
+  return result;
 }
 
 export class ProductAnalysisAgent {
@@ -105,37 +150,68 @@ export class ProductAnalysisAgent {
     }
 
     const prompt = [
-      'Вы — старший маркетинговый аналитик. На основе входных данных подготовь основу для стратегии продукта.',
-      'Тема кампании: ' + topic + '.',
-      'Длительность кампании: ' + campaignDuration + '.',
-      'Цель кампании: ' + campaignGoal + '.',
+      'Вы — старший аналитик по маркетингу. На основе входного текста и темы составьте краткий анализ продукта.',
+      `Тема продукта: ${topic}.`,
+      `Длительность кампании: ${campaignDuration}.`,
+      `Цель кампании: ${campaignGoal}.`,
       channelsSentence,
-      (baseText ? 'Используй утверждённые материалы: ' + baseText : 'Если утверждённых текстов нет, опирайся на собственный анализ.'),
-      'Сформулируй 2–3 ключевые метрики успеха (KQM), которые покажут, что кампания достигает цели.',
-      'Определи основные каналы продвижения, объяснив их роль и ожидаемый вклад.',
-      'Добавь краткие аналитические инсайты и рекомендации по коммуникациям.',
-      'Ответ верни строго в формате JSON {"kqm": ["..."], "channels": ["..."], "insights": ["..."]} без объяснений или текста вне JSON.',
-      'Учти дополнительные требования к формату.' + formatClause,
+      baseText
+        ? `Ключевой текст: ${baseText}`
+        : 'Текстовое описание отсутствует, опирайтесь на тему и формат.',
+      'Определите минимум три ключевые метрики качества продукта (KQM) и три основных канала продвижения.',
+      'Если информации недостаточно, делайте разумные предположения и помечайте их как гипотезы.',
+      'Ответ верните строго в формате JSON со структурой: {"kqm": ["..."], "channels": ["..."], "insights": ["..."]}.',
+      'Не добавляйте пояснений вне JSON.' + formatClause,
     ]
       .filter(Boolean)
       .join(' ');
 
-
     try {
-      const { result: rawJson, tokens } = await ProviderManager.invoke(ANALYSIS_MODEL, prompt, 'text');
+      const { result: rawJson, tokens, modelUsed, warning } = await ProviderManager.invoke(
+        ANALYSIS_MODEL,
+        prompt,
+        'text'
+      );
 
       let parsed;
       try {
         parsed = JSON.parse(cleanJsonString(rawJson));
-      } catch (error) {
-        throw new Error('LLM did not return valid JSON for product analysis.');
+      } catch (parseError) {
+        console.warn('[ProductAnalysisAgent] Received non-JSON response. Using fallback analysis.');
+        const fallback = attachMeta(
+          buildFallbackAnalysis({ topic, baseText, distributionChannels }),
+          {
+            warning: parseError.message,
+            model: modelUsed || `${ANALYSIS_MODEL}-fallback`,
+            tokens: 0,
+            prompt,
+          }
+        );
+
+        logger.logStep(nodeId, 'END', {
+          status: 'SUCCESS',
+          metrics: fallback.kqm.length,
+          channels: fallback.channels.length,
+          fallback: true,
+        });
+
+        TaskStore.updateNodeStatus(nodeId, 'SUCCESS', fallback, 0);
+        return fallback;
       }
 
-      const normalized = {
-        kqm: Array.isArray(parsed.kqm) ? parsed.kqm : [],
-        channels: Array.isArray(parsed.channels) ? parsed.channels : [],
-        insights: Array.isArray(parsed.insights) ? parsed.insights : [],
-      };
+      const normalized = attachMeta(
+        {
+          kqm: Array.isArray(parsed.kqm) ? parsed.kqm : [],
+          channels: Array.isArray(parsed.channels) ? parsed.channels : [],
+          insights: Array.isArray(parsed.insights) ? parsed.insights : [],
+        },
+        {
+          model: modelUsed || ANALYSIS_MODEL,
+          tokens,
+          prompt,
+          warning,
+        }
+      );
 
       const cost = tokens * 0.0000005;
       logger.logStep(nodeId, 'END', {
@@ -145,17 +221,29 @@ export class ProductAnalysisAgent {
         cost,
       });
 
-      const resultPayload = {
-        ...normalized,
-        meta: { model: ANALYSIS_MODEL, tokens, prompt },
-      };
-
-      TaskStore.updateNodeStatus(nodeId, 'SUCCESS', resultPayload, cost);
-      return resultPayload;
+      TaskStore.updateNodeStatus(nodeId, 'SUCCESS', normalized, cost);
+      return normalized;
     } catch (error) {
-      logger.logStep(nodeId, 'ERROR', { message: error.message });
-      TaskStore.updateNodeStatus(nodeId, 'FAILED', { error: error.message });
-      throw error;
+      console.warn('[ProductAnalysisAgent] Falling back after provider failure:', error.message);
+      const fallback = attachMeta(
+        buildFallbackAnalysis({ topic, baseText, distributionChannels }),
+        {
+          warning: error.message,
+          model: `${ANALYSIS_MODEL}-fallback`,
+          tokens: 0,
+          prompt,
+        }
+      );
+
+      logger.logStep(nodeId, 'END', {
+        status: 'SUCCESS',
+        metrics: fallback.kqm.length,
+        channels: fallback.channels.length,
+        fallback: true,
+      });
+
+      TaskStore.updateNodeStatus(nodeId, 'SUCCESS', fallback, 0);
+      return fallback;
     }
   }
 }

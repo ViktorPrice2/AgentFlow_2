@@ -24,8 +24,25 @@ const loadAgentModule = async agentType => {
 const FINAL_NODE_STATUSES = new Set(['SUCCESS', 'FAILED', 'MANUALLY_OVERRIDDEN', 'SKIPPED_RETRY']);
 
 async function processJob(job, onUpdate) {
+  if (!job) {
+    console.error('[MasterAgent] Attempted to process an empty job from the queue.');
+    return null;
+  }
+
   const { agentType, payload } = job;
-  const { nodeId } = payload;
+  const nodeId = payload?.nodeId;
+
+  if (!nodeId) {
+    console.error(`[MasterAgent] Job for agent ${agentType} is missing a nodeId.`);
+    return null;
+  }
+
+  const existingNode = TaskStore.getNode(nodeId);
+  if (!existingNode) {
+    console.error(`[MasterAgent] Node ${nodeId} not found for agent ${agentType}.`);
+    TaskStore.updateNodeStatus(nodeId, 'FAILED', { error: 'Node not found for job.' });
+    return null;
+  }
 
   const node = TaskStore.updateNodeStatus(nodeId, 'RUNNING');
   if (node && typeof onUpdate === 'function') {
@@ -44,7 +61,8 @@ async function processJob(job, onUpdate) {
   try {
     await AgentModule.execute(nodeId, payload);
   } catch (error) {
-    console.error(`Worker error processing ${nodeId}:`, error.message);
+    console.error(`Worker error processing ${nodeId}:`, error);
+    TaskStore.updateNodeStatus(nodeId, 'FAILED', { error: error.message || String(error) });
   }
 
   const updatedNode = TaskStore.getNode(nodeId);
