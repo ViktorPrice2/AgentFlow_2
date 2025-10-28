@@ -2,6 +2,7 @@ import '../utils/loadEnv.js';
 import { ProviderManager } from '../core/ProviderManager.js';
 import { Logger } from '../core/Logger.js';
 import { TaskStore } from '../core/db/TaskStore.js';
+import { isFallbackStubText } from '../utils/fallbackUtils.js';
 
 const ANALYSIS_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
@@ -83,6 +84,7 @@ function buildFallbackAnalysis({ topic, baseText, distributionChannels = [] }) {
       tokens: 0,
       prompt: null,
       warning: 'LLM output unavailable. Generated heuristic fallback.',
+      fallback: true,
     },
   };
 }
@@ -96,6 +98,14 @@ function attachMeta(result, meta) {
 
   if (!result.meta.warning) {
     delete result.meta.warning;
+  }
+
+  if (!result.meta.fallback) {
+    delete result.meta.fallback;
+  }
+
+  if (!result.meta.upstreamFallback) {
+    delete result.meta.upstreamFallback;
   }
 
   return result;
@@ -113,7 +123,15 @@ export class ProductAnalysisAgent {
 
     const upstreamId = node.dependsOn?.[0];
     const upstreamResult = upstreamId ? TaskStore.getResult(upstreamId) : null;
-    const baseText = upstreamResult?.approvedContent || upstreamResult?.text || '';
+    const rawBaseText = upstreamResult?.approvedContent || upstreamResult?.text || '';
+    const baseText = typeof rawBaseText === 'string' ? rawBaseText : '';
+    const upstreamMeta = upstreamResult?.meta || {};
+    const upstreamFallback =
+      Boolean(upstreamMeta.fallback) ||
+      isFallbackStubText(baseText) ||
+      isFallbackStubText(upstreamMeta?.warning) ||
+      isFallbackStubText(upstreamMeta?.prompt);
+    const effectiveBaseText = upstreamFallback ? '' : baseText;
     const topic = node.input_data?.topic || 'Продукт';
     const formatClause = formatInstructionsToText(node.input_data?.format);
     const campaignDuration = node.input_data?.campaign_duration || '1 месяц';
@@ -133,8 +151,8 @@ export class ProductAnalysisAgent {
           'Improve click-through rate across paid channels',
         ],
         channels: ['Email Drip', 'Paid Social', 'Influencer Collaborations'],
-        insights: baseText
-          ? [`Leverage approved copy: ${baseText.slice(0, 80)}...`]
+        insights: effectiveBaseText
+          ? [`Leverage approved copy: ${effectiveBaseText.slice(0, 80)}...`]
           : ['No upstream copy provided; generate fresh messaging.'],
       };
 
@@ -155,8 +173,8 @@ export class ProductAnalysisAgent {
       `Длительность кампании: ${campaignDuration}.`,
       `Цель кампании: ${campaignGoal}.`,
       channelsSentence,
-      baseText
-        ? `Ключевой текст: ${baseText}`
+      effectiveBaseText
+        ? `Ключевой текст: ${effectiveBaseText}`
         : 'Текстовое описание отсутствует, опирайтесь на тему и формат.',
       'Определите минимум три ключевые метрики качества продукта (KQM) и три основных канала продвижения.',
       'Если информации недостаточно, делайте разумные предположения и помечайте их как гипотезы.',
@@ -167,7 +185,7 @@ export class ProductAnalysisAgent {
       .join(' ');
 
     try {
-      const { result: rawJson, tokens, modelUsed, warning } = await ProviderManager.invoke(
+      const { result: rawJson, tokens, modelUsed, warning, isFallback } = await ProviderManager.invoke(
         ANALYSIS_MODEL,
         prompt,
         'text'
@@ -179,20 +197,21 @@ export class ProductAnalysisAgent {
       } catch (parseError) {
         console.warn('[ProductAnalysisAgent] Received non-JSON response. Using fallback analysis.');
         const fallback = attachMeta(
-          buildFallbackAnalysis({ topic, baseText, distributionChannels }),
+          buildFallbackAnalysis({ topic, baseText: effectiveBaseText, distributionChannels }),
           {
             warning: parseError.message,
             model: modelUsed || `${ANALYSIS_MODEL}-fallback`,
             tokens: 0,
             prompt,
+            upstreamFallback,
           }
         );
-
         logger.logStep(nodeId, 'END', {
           status: 'SUCCESS',
           metrics: fallback.kqm.length,
           channels: fallback.channels.length,
           fallback: true,
+          upstreamFallback: upstreamFallback || undefined,
         });
 
         TaskStore.updateNodeStatus(nodeId, 'SUCCESS', fallback, 0);
@@ -210,6 +229,8 @@ export class ProductAnalysisAgent {
           tokens,
           prompt,
           warning,
+          fallback: Boolean(isFallback),
+          upstreamFallback,
         }
       );
 
@@ -219,6 +240,7 @@ export class ProductAnalysisAgent {
         metrics: normalized.kqm.length,
         channels: normalized.channels.length,
         cost,
+        upstreamFallback: upstreamFallback || undefined,
       });
 
       TaskStore.updateNodeStatus(nodeId, 'SUCCESS', normalized, cost);
@@ -226,12 +248,13 @@ export class ProductAnalysisAgent {
     } catch (error) {
       console.warn('[ProductAnalysisAgent] Falling back after provider failure:', error.message);
       const fallback = attachMeta(
-        buildFallbackAnalysis({ topic, baseText, distributionChannels }),
+        buildFallbackAnalysis({ topic, baseText: effectiveBaseText, distributionChannels }),
         {
           warning: error.message,
           model: `${ANALYSIS_MODEL}-fallback`,
           tokens: 0,
           prompt,
+          upstreamFallback,
         }
       );
 
@@ -240,6 +263,7 @@ export class ProductAnalysisAgent {
         metrics: fallback.kqm.length,
         channels: fallback.channels.length,
         fallback: true,
+        upstreamFallback: upstreamFallback || undefined,
       });
 
       TaskStore.updateNodeStatus(nodeId, 'SUCCESS', fallback, 0);
