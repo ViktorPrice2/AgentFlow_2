@@ -56,6 +56,51 @@ function formatInstructionsToText(formatData) {
   return ` Формат и ограничения: ${String(formatData).trim()}.`;
 }
 
+function buildFallbackAnalysis({ topic, baseText, distributionChannels = [] }) {
+  const defaultChannels = ['Соцсети', 'Email-рассылки', 'Партнёрские интеграции'];
+  const channels = distributionChannels.length ? distributionChannels : defaultChannels;
+
+  const insights = baseText
+    ? [
+        `Используйте ключевые идеи из утверждённых материалов: ${baseText.slice(0, 120)}...`,
+        'Проведите A/B тесты для уточнения месседжинга и корректировки KPI.',
+      ]
+    : [
+        'Сформулируйте гипотезы по позиционированию и подтвердите их быстрыми исследованиями.',
+        'Добавьте UGC/социальные доказательства, чтобы повысить доверие аудитории.',
+      ];
+
+  return {
+    kqm: [
+      `Увеличить узнаваемость ${topic} среди целевой аудитории`,
+      'Достичь целевого CTR и вовлечённости в ключевых каналах',
+      'Собрать качественные лиды и сформировать повторные касания',
+    ],
+    channels,
+    insights,
+    meta: {
+      model: `${ANALYSIS_MODEL}-fallback`,
+      tokens: 0,
+      prompt: null,
+      warning: 'LLM output unavailable. Generated heuristic fallback.',
+    },
+  };
+}
+
+function attachMeta(result, meta) {
+  if (!result.meta) {
+    result.meta = {};
+  }
+
+  Object.assign(result.meta, meta);
+
+  if (!result.meta.warning) {
+    delete result.meta.warning;
+  }
+
+  return result;
+}
+
 export class ProductAnalysisAgent {
   static async execute(nodeId) {
     const node = TaskStore.getNode(nodeId);
@@ -71,6 +116,9 @@ export class ProductAnalysisAgent {
     const baseText = upstreamResult?.approvedContent || upstreamResult?.text || '';
     const topic = node.input_data?.topic || 'Продукт';
     const formatClause = formatInstructionsToText(node.input_data?.format);
+    const distributionChannels = Array.isArray(node.input_data?.distribution_channels)
+      ? node.input_data.distribution_channels
+      : [];
     const isMockMode = process.env.MOCK_MODE === 'true';
 
     if (isMockMode) {
@@ -107,20 +155,51 @@ export class ProductAnalysisAgent {
     ].join(' ');
 
     try {
-      const { result: rawJson, tokens } = await ProviderManager.invoke(ANALYSIS_MODEL, prompt, 'text');
+      const { result: rawJson, tokens, modelUsed, warning } = await ProviderManager.invoke(
+        ANALYSIS_MODEL,
+        prompt,
+        'text'
+      );
 
       let parsed;
       try {
         parsed = JSON.parse(cleanJsonString(rawJson));
-      } catch (error) {
-        throw new Error('LLM did not return valid JSON for product analysis.');
+      } catch (parseError) {
+        console.warn('[ProductAnalysisAgent] Received non-JSON response. Using fallback analysis.');
+        const fallback = attachMeta(
+          buildFallbackAnalysis({ topic, baseText, distributionChannels }),
+          {
+            warning: parseError.message,
+            model: modelUsed || `${ANALYSIS_MODEL}-fallback`,
+            tokens: 0,
+            prompt,
+          }
+        );
+
+        logger.logStep(nodeId, 'END', {
+          status: 'SUCCESS',
+          metrics: fallback.kqm.length,
+          channels: fallback.channels.length,
+          fallback: true,
+        });
+
+        TaskStore.updateNodeStatus(nodeId, 'SUCCESS', fallback, 0);
+        return fallback;
       }
 
-      const normalized = {
-        kqm: Array.isArray(parsed.kqm) ? parsed.kqm : [],
-        channels: Array.isArray(parsed.channels) ? parsed.channels : [],
-        insights: Array.isArray(parsed.insights) ? parsed.insights : [],
-      };
+      const normalized = attachMeta(
+        {
+          kqm: Array.isArray(parsed.kqm) ? parsed.kqm : [],
+          channels: Array.isArray(parsed.channels) ? parsed.channels : [],
+          insights: Array.isArray(parsed.insights) ? parsed.insights : [],
+        },
+        {
+          model: modelUsed || ANALYSIS_MODEL,
+          tokens,
+          prompt,
+          warning,
+        }
+      );
 
       const cost = tokens * 0.0000005;
       logger.logStep(nodeId, 'END', {
@@ -133,9 +212,26 @@ export class ProductAnalysisAgent {
       TaskStore.updateNodeStatus(nodeId, 'SUCCESS', normalized, cost);
       return normalized;
     } catch (error) {
-      logger.logStep(nodeId, 'ERROR', { message: error.message });
-      TaskStore.updateNodeStatus(nodeId, 'FAILED', { error: error.message });
-      throw error;
+      console.warn('[ProductAnalysisAgent] Falling back after provider failure:', error.message);
+      const fallback = attachMeta(
+        buildFallbackAnalysis({ topic, baseText, distributionChannels }),
+        {
+          warning: error.message,
+          model: `${ANALYSIS_MODEL}-fallback`,
+          tokens: 0,
+          prompt,
+        }
+      );
+
+      logger.logStep(nodeId, 'END', {
+        status: 'SUCCESS',
+        metrics: fallback.kqm.length,
+        channels: fallback.channels.length,
+        fallback: true,
+      });
+
+      TaskStore.updateNodeStatus(nodeId, 'SUCCESS', fallback, 0);
+      return fallback;
     }
   }
 }

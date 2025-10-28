@@ -154,29 +154,102 @@ export class ProviderManager {
 
       const axiosConfig = {
         headers: { 'Content-Type': 'application/json' },
-        timeout: 60000,
+        timeout: 180000,
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity,
       };
 
-      const payload = {
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
+      const callGemini = async (promptText, safeAttempted = false) => {
+        const payload = {
+          contents: [{ role: 'user', parts: [{ text: promptText }] }],
+          generationConfig: {
+            temperature: 0.6,
+            topP: 0.95,
+            maxOutputTokens: 1024,
+          },
+        };
+
+        try {
+          const response = await sendRequestWithRetries(url, payload, axiosConfig);
+
+          const candidates = response.data.candidates || [];
+          if (candidates.length === 0) {
+            const blockReason =
+              response.data.promptFeedback?.blockReason ||
+              'API returned no candidates (possible block/safety reason).';
+            throw new Error(`Gemini API Error: ${blockReason}`);
+          }
+
+          const firstCandidateWithText = candidates.find(candidate =>
+            candidate?.content?.parts?.some(part => typeof part?.text === 'string' && part.text.trim().length)
+          );
+
+          if (!firstCandidateWithText) {
+            const blockReason =
+              response.data.promptFeedback?.blockReason ||
+              candidates[0]?.safetyRatings?.[0]?.blockReason ||
+              'Candidates contained no text parts.';
+
+            if (!safeAttempted) {
+              console.warn('[ProviderManager] No textual content returned. Retrying with safe prompt instructions.');
+              const safePrompt = `${promptText}\n\nПожалуйста, сформулируй безопасный, нейтральный ответ, избегая запрещённых и чувствительных тем.`;
+              return callGemini(safePrompt, true);
+            }
+
+            throw new Error(`Gemini API Error: ${blockReason}`);
+          }
+
+          const textPart = firstCandidateWithText.content?.parts?.find(
+            part => typeof part?.text === 'string' && part.text.trim().length
+          );
+
+          let text = textPart?.text;
+          if (!text || !text.trim().length) {
+            const aggregatedText = (firstCandidateWithText.content?.parts || [])
+              .map(part => (typeof part?.text === 'string' ? part.text.trim() : ''))
+              .filter(Boolean)
+              .join('\n');
+
+            if (aggregatedText && aggregatedText.trim().length) {
+              text = aggregatedText.trim();
+            } else {
+              const blockReason =
+                response.data.promptFeedback?.blockReason ||
+                firstCandidateWithText?.safetyRatings?.[0]?.blockReason ||
+                'Candidate parts missing textual content.';
+
+              if (!safeAttempted) {
+                console.warn('[ProviderManager] Candidate parts empty. Retrying with safe prompt instructions.');
+                const safePrompt = `${promptText}\n\nПожалуйста, сформулируй безопасный, нейтральный ответ, избегая запрещённых и чувствительных тем.`;
+                return callGemini(safePrompt, true);
+              }
+
+              throw new Error(`Gemini API Error: ${blockReason}`);
+            }
+          }
+
+          const usage = response.data.usageMetadata;
+          const tokens = usage ? usage.totalTokenCount : text.length;
+
+          return { result: text, tokens, modelUsed: model };
+        } catch (error) {
+          logAxiosError(error, 'Text API - Failure');
+          if (!safeAttempted) {
+            console.warn('[ProviderManager] Text call failed. Retrying with safe prompt instructions.');
+            const safePrompt = `${promptText}\n\nПожалуйста, сформулируй безопасный, нейтральный ответ, избегая запрещённых и чувствительных тем.`;
+            return callGemini(safePrompt, true);
+          }
+
+          throw new Error(`Request failed with status ${error.response?.status || 'Unknown'}. Details in console.`);
+        }
       };
 
       try {
-        const response = await sendRequestWithRetries(url, payload, axiosConfig);
-
-        if (!response.data.candidates || response.data.candidates.length === 0) {
-          const blockReason = response.data.promptFeedback?.blockReason || 'API returned no candidates (possible block/safety reason).';
-          throw new Error(`Gemini API Error: ${blockReason}`);
-        }
-
-        const text = response.data.candidates[0].content.parts[0].text;
-        const usage = response.data.usageMetadata;
-        const tokens = usage ? usage.totalTokenCount : text.length;
-
-        return { result: text, tokens, modelUsed: model };
+        return await callGemini(prompt);
       } catch (error) {
-        logAxiosError(error, 'Text API - Failure');
-        throw new Error(`Request failed with status ${error.response?.status || 'Unknown'}. Details in console.`);
+        console.warn(`[ProviderManager] Falling back to safe stub after Gemini failure: ${error.message}`);
+        const fallbackText = `Автоматическая генерация недоступна: ${error.message}. Подготовьте текст вручную или повторите позже.`;
+        return { result: fallbackText, tokens: 0, modelUsed: `${model}-fallback`, warning: error.message };
       }
     }
 
