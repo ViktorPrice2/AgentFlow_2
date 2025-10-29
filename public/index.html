@@ -728,6 +728,37 @@
             height: 100% !important;
         }
 
+        .guard-alert {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 18px 20px;
+            border-radius: 16px;
+            border: 1px solid rgba(220, 38, 38, 0.35);
+            background: linear-gradient(135deg, rgba(254, 226, 226, 0.9), rgba(248, 113, 113, 0.28));
+            color: var(--danger);
+            margin-bottom: 22px;
+            box-shadow: 0 16px 35px rgba(220, 38, 38, 0.18);
+        }
+
+        .guard-alert strong {
+            font-weight: 600;
+            display: block;
+            color: var(--danger);
+        }
+
+        .guard-alert span {
+            color: var(--text-main);
+        }
+
+        .guard-alert .secondary {
+            background: #ffffff;
+            color: var(--danger);
+            border-color: rgba(220, 38, 38, 0.45);
+        }
+
         .approve-btn {
             margin-top: 22px;
             background: linear-gradient(135deg, var(--success), #16a34a);
@@ -1673,8 +1704,29 @@
         function renderSchedule(schedule, taskId, taskStatus = '', nodes = []) {
             currentSchedule = Array.isArray(schedule) ? schedule : [];
 
+            const failedGuardNode = Array.from(nodes || [])
+                .filter(node => {
+                    const agentType = (node?.agent_type || node?.agent || '').toLowerCase();
+                    return agentType.includes('guardagent') && node?.status === 'FAILED';
+                })
+                .sort((a, b) => (b.attempt || 0) - (a.attempt || 0))[0];
+
+            const guardReason = failedGuardNode?.result_data?.reason || failedGuardNode?.result_data?.error;
+            const guardBanner = failedGuardNode
+                ? `
+                    <div class="guard-alert">
+                        <div>
+                            <strong>GuardAgent остановил выполнение.</strong>
+                            <span>${escapeHtml(guardReason || 'Проверьте входные данные и скорректируйте промпт.')}</span>
+                        </div>
+                        <button class="secondary" onclick="openPromptModal('${failedGuardNode.id}')">✏️ Редактировать промпт</button>
+                    </div>
+                `
+                : '';
+
             if (!currentSchedule.length) {
                 scheduleContainer.innerHTML = `
+                    ${guardBanner}
                     <h2>График публикаций и статистика</h2>
                     <p class="schedule-subtitle">Ожидаем формирования стратегии и плана от агентов…</p>
                 `;
@@ -1686,6 +1738,7 @@
             const hasHumanGate = (nodes || []).some(node => node.agent_type === 'HumanGateAgent');
             const strategyReady = (nodes || []).some(node => node.agent_type === 'StrategyAgent' && node.status === 'SUCCESS');
             const humanGateCompleted = (nodes || []).some(node => node.agent_type === 'HumanGateAgent' && node.status === 'SUCCESS');
+
             const generatorEnabled = awaitingHumanInput || humanGateCompleted || !hasHumanGate || strategyReady;
             const planEditable = awaitingHumanInput || (!hasHumanGate || humanGateCompleted);
             const metricsEditable = humanGateCompleted || !hasHumanGate;
@@ -1704,6 +1757,7 @@
                         : 'Расписание формируется автоматически.';
 
             let html = `
+                ${guardBanner}
                 <div class="schedule-header">
                     <div>
                         <h2>График публикаций и статистика</h2>
